@@ -1,0 +1,14 @@
+# Direct dependency pins installed and smoke-checked on Linux Python 3.12.14.
+# Target Windows Python 3.12.7 verification remains pending.
+langchain==1.4.8
+langgraph==1.2.19
+langchain-groq==1.1.3
+langgraph-checkpoint-sqlite==3.1.3
+fastapi==0.162.0
+uvicorn==0.54.0
+streamlit==1.66.1
+httpx==0.28.1
+pydantic==2.14.2
+pydantic-settings==2.16.2
+python-dotenv==1.2.4
+pytest==9.2.0
