@@ -37,8 +37,8 @@ before editing. Update progress and walkthrough alongside implementation.
 
 ## Verification and continuation
 
-Checkpoint 01 command: `python scripts/check_environment.py` (offline).
-Later: `python -m pytest` once meaningful application tests exist. Test routing,
+Commands: `python scripts/check_environment.py` and `python -m pytest -q`
+(offline). Tests currently cover domain rules, not the full app. Test routing,
 locks, dependency invalidation, time constraints and arithmetic, not prompt wording.
 Document exact executed checks, runtime, pending work, and simulated/live status.
 Do not claim the full application works on the strength of imports alone.

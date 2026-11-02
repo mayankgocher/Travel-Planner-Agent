@@ -1,6 +1,7 @@
 # Agreed architecture — implementation blueprint
 
-Status: planned, not yet implemented in checkpoint 01.
+Status: orchestration is planned. Checkpoint 02 implements domain schemas,
+configuration and cost/replanning/selection-lock primitives only.
 
 ## Responsibilities
 
@@ -118,8 +119,11 @@ unverified provider information and excluded from the core subtotal.
 | frontend/app.py | Streamlit chat, results, locks, versions and download |
 | tests/, evaluation/ | Deterministic tests and labeled evaluation cases |
 
-Only scripts/ and documentation are implemented in checkpoint 01. Other paths
-are planned; placeholder agent files are intentionally not presented as working.
+Implemented in checkpoint 02: backend/config.py, backend/schemas.py,
+backend/services/costs.py, backend/services/replanning.py and tests/test_domain.py.
+The rest of this module map is planned. Lock compatibility with changed offers
+and graph enforcement remain pending; the primitive only detects replacement,
+removal and unlock attempts. No agent files are presented as working stubs.
 
 ## Design references
 
@@ -129,5 +133,5 @@ are planned; placeholder agent files are intentionally not presented as working.
 - https://console.groq.com/docs/structured-outputs
 
 Separate tool selection and final structured-answer calls where required by the
-selected Groq model. Validate the LangChain wrapper path in the next checkpoint;
+selected Groq model. Validate the LangChain wrapper path during agent integration;
 the earlier successful Groq tests used raw HTTP, not this framework integration.

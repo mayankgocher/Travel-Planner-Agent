@@ -1,65 +1,61 @@
 # Progress and continuation checkpoint
 
-Updated: 2 November 2026 (India). Checkpoint 01: foundation.
+Updated: 3 November 2026 (India). Checkpoint 02: domain foundation.
 
-## Completed
+## Completed and verified
 
-- Agreed architecture, scope, source findings, agent instructions and walkthrough.
-- .env placeholders, .env.example, .gitignore and Python version marker.
-- Dependency selection/pins and offline environment check (verification details
-  recorded below).
+- Checkpoint 01: architecture, environment templates, dependencies, smoke check.
+- User verified dependency installation, pip check, imports and conditional graph
+  smoke check on Windows Python 3.12.7 in the corrected project directory.
+- Checkpoint 02: explicit configuration loader; validated preferences, offers,
+  sources and quotes; Decimal cost arithmetic; replanning table and lock guard.
+- `python -m pytest -q`: 20 offline cases passed on Linux Python 3.12.14.
+  Tests block network connections and use temporary fixture configuration.
+- No live provider calls were made while building checkpoint 02.
+- Windows Python 3.12.7 verification of new tests: pending.
+- Requirements unchanged. requirements-lock.txt is the Linux reference resolution,
+  not a hash-locked cross-platform guarantee.
 
-## Executed verification
+## Still planned, not implemented
 
-- Linux Python 3.12.14: installed all pinned direct dependencies in a fresh venv.
-- `python scripts/check_environment.py`: passed imports and a conditional
-  LangGraph invocation. No model/provider requests or credentials were used.
-- `uv pip check`: all 77 installed packages compatible.
-- Exact Python 3.12.7 and Windows installation: not yet verified.
-- Full app, live adapters, interface and evaluations: not yet implemented/tested.
-- requirements-lock.txt is the resolved Linux reference environment, not a
-  hash-locked cross-platform guarantee. Start with requirements.txt on Windows.
+Four agents, real graph orchestration, clarification resumption, provider clients,
+FastAPI routes, Streamlit, retained-lock compatibility checking, persistent trip
+state, snapshots, stale-version protection, timing validation/repair, Markdown
+export and systematic evaluation. These remain included in scope. The new
+replanning/lock functions are primitives; no running app enforces them yet.
 
-## Not implemented
+## Exact next steps
 
-The working application: four agents, provider adapters, FastAPI routes,
-Streamlit UI, clarification/resumption, lock enforcement, snapshots, selective
-replanning, validation/repair, Markdown export and evaluation suite.
-Do not describe planned features as working.
+1. Add shared state and allowed graph routing; verify clarification and specialist
+   work ordering end to end with visibly labeled offline fixtures.
+2. Implement four agents and ChatGroq tool/structured output integration. Earlier
+   raw HTTP Groq feasibility tests do not prove the wrapper path works.
+3. Add provider adapters using current documentation and sanitized probe examples.
+   Verify station lookup, return journeys, taxes, occupancy and source links.
+4. Connect persistence, retained-offer compatibility, locks and snapshots; test
+   incompatible requests, partial failures and stale updates.
+5. Add FastAPI, Streamlit, completed activity trace and Markdown download.
+6. Add timing/offer validation, one itinerary repair and evaluation cases.
+7. Bounded live walkthrough on the user's Windows machine; update final docs.
 
-## Next implementation steps
+## Decisions to preserve
 
-1. Define Pydantic trip/offer/plan schemas and configuration. Add source timestamps,
-   currencies, explicit price basis and unknown fields before writing adapters.
-2. Implement graph state, allowed routing and deterministic dependency rules.
-   Add a visibly labeled offline fixture mode for an end-to-end testable path.
-3. Integrate ChatGroq and four focused agents; verify structured/tool calls
-   independently. Keep keys local and live checks explicitly selected.
-4. Implement SerpApi, RailRadar and optional weather adapters against documented
-   contracts; use existing test scripts/results from the earlier API-testing
-   project as supporting evidence when accessible. Do not copy its ledger/caps.
-5. Add persistent clarification checkpoints and snapshot/lock rules. Test
-   incompatible updates and partial provider failures before UI controls.
-6. Add thin FastAPI and Streamlit interface, activity trace and Markdown export.
-7. Run meaningful offline/integration tests, then a bounded live walkthrough on
-   the user's Windows machine. Update docs and deliver a clean checkpoint.
+- Four agents: Supervisor, Transportation, Hotel, Itinerary; single destination.
+- LangGraph/LangChain, Groq, FastAPI, Streamlit and Python 3.12.7.
+- Root: D:\Projects\GenAI\Agentic AI\Travel Planning Agent.
+- No booking/payment automation and no separate search cache. Results in state.
+- Simple conflict repair, selective replanning, locks, view-only numbered plan
+  versions and Markdown download are included.
+- Core costs: transport + hotel. Unknown costs stay unknown. Attraction prices
+  may be shown unverified; no extra fee research. Optional daily weather.
+- Groq paid upgrade chosen, activation/account limits unverified. Independent
+  SerpApi/RailRadar quotas remain. Do not inherit probe caps/fixed 65-second wait;
+  keep bounded retries and graph cycles.
 
-## Product decisions to preserve
+## Continue after interruption
 
-- Four agents, single-destination trips; LangGraph/LangChain, Groq,
-  Streamlit/FastAPI, Python 3.12.7. Root D:\Projects\GenAI\Agentic AI\Travel Planning Agent.
-- No payment/booking automation. Source links when valid and available.
-- Costs focus on hotel + intercity flight/train; exclusions visible.
-- Simple one-pass conflict repair, rule-based selective replanning, user locks,
-  numbered view-only plan snapshots and download of viewed version are included.
-- Optional Maps place discovery and daily weather. No extra fee verification.
-- No separate search cache. Current trip results remain in graph state.
-- Groq paid plan chosen; upgrade and account limits not yet confirmed.
-
-## Continuation instructions
-
-Read AGENTS.md then ARCHITECTURE.md and API_FINDINGS.md. The latest checkpoint
-ZIP is enough to continue the foundation, but does not contain all raw prior
-API responses. Ask for relevant existing sanitized probe evidence only if an
-implementation decision cannot be established from docs and adapter tests.
-Do not ask for keys in chat. No full codebase has been delivered yet.
+Read AGENTS.md, ARCHITECTURE.md, API_FINDINGS.md, this file and walkthrough.
+Run `python -m pytest -q` before extending the foundation. The checkpoint ZIP
+contains no real keys or original raw probe reports. Obtain sanitized evidence
+only if a specific adapter contract cannot be resolved from docs/tests. Never
+ask for keys in chat or claim that the full application is runnable yet.
