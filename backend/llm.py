@@ -1,5 +1,7 @@
 """LangChain/Groq bridge. No client or request is created during imports."""
 from dataclasses import dataclass
+import re
+from urllib.parse import quote
 
 from groq import APIError
 from langchain_core.exceptions import OutputParserException
@@ -13,6 +15,31 @@ from backend.config import Settings
 class ModelCallError(RuntimeError):
     """Safe public error; never carries provider response bodies or credentials."""
     http_status: int | None = None
+    provider_error: dict[str, str] | None = None
+
+
+def safe_provider_error(body, secret: str) -> dict[str, str]:
+    """Keep only diagnostic fields, excluding generated output and request data.
+
+    Redact before truncation. Never stringify the full SDK exception or body.
+    """
+    if not isinstance(body, dict):
+        return {}
+    error = body.get("error", body)
+    if not isinstance(error, dict):
+        return {}
+    details = {}
+    for field in ("message", "code", "param", "type"):
+        value = error.get(field)
+        if not isinstance(value, (str, int)) or isinstance(value, bool):
+            continue
+        text = str(value)
+        if secret:
+            text = text.replace(secret, "[REDACTED]").replace(quote(secret, safe=""), "[REDACTED]")
+        text = re.sub(r"(?i)Bearer\s+[^\s\"'<>]+", "Bearer [REDACTED]", text)
+        text = re.sub(r"gsk_[A-Za-z0-9_-]+", "[REDACTED]", text)
+        details[field] = text[:1200]
+    return details
 
 
 @dataclass(frozen=True)
@@ -54,4 +81,6 @@ def invoke_structured(model: ChatGroq, schema: type[BaseModel], messages: list) 
     except (APIError, OutputParserException, ValidationError, ValueError, KeyError, TypeError) as exc:
         error = ModelCallError(f"Model call failed ({type(exc).__name__}); no preferences were applied.")
         error.http_status = getattr(exc, "status_code", None)
+        key = model.groq_api_key.get_secret_value() if model.groq_api_key else ""
+        error.provider_error = safe_provider_error(getattr(exc, "body", None), key)
         raise error from None

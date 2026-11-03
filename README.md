@@ -5,7 +5,7 @@ Checkpoint 04 — LangChain/Groq Supervisor intake, 3 November 2026.
 **This checkpoint is not yet a working travel application.** It contains the
 agreed design, environment templates, dependency pins, an offline environment
 check, validated domain models, configuration, cost/lock/replanning rules and
-45 offline tests, real LangGraph orchestration, and an optional Groq Supervisor
+55 offline tests, real LangGraph orchestration, and an optional Groq Supervisor
 that interprets natural-language requests. The three downstream workers remain
 synthetic; their live LLM agents, provider adapters, API routes and frontend
 follow later. Do not present those planned features as completed.
@@ -15,7 +15,7 @@ Target: Python **3.12.7**, Windows, project root
 01 dependency installation and graph smoke check on Windows Python 3.12.7.
 Checkpoint 02's 20 tests also passed on Windows Python 3.12.7. The user reported
 the checkpoint 03 demo completed after the test-discovery fix. Checkpoint 04's
-45 tests passed on Linux Python 3.12.14; its Windows and live Groq checks remain
+55 tests passed on Linux Python 3.12.14; its Windows and live Groq checks remain
 pending.
 
 ## Read first
@@ -78,6 +78,18 @@ ignored data/reports/ contains parsed preferences, checks and token counters,
 not keys/raw responses/private reasoning. Share that JSON only. Missing usage
 after failure is unknown consumption; do not repeat failures blindly. Without
 --live, the script is a zero-request preview and loads no key.
+
+Diagnostic revision: the initial live run used an overridden model name; a later
+run with the correct model received HTTP 400. The exact rejection reason was not
+saved by the original handler. The revised handler retains only sanitized error
+message/code/param/type, excluding failed generations and raw request data. It
+reports provider rejections separately from preference-check failures. This is
+a diagnostic fix. A subsequent live report identified the cause: the updates
+value union contained both integer and number. The corrected schema uses number
+only for numeric values; Python requires whole numbers for adults, hotel class
+and flight sort codes. Fractional integer fields are rejected, never truncated.
+A regression test inspects the actual outgoing schema. Live verification of
+this corrected request remains pending.
 
 Add keys locally only when live integration testing begins. Never paste them in
 chat, commit `.env`, or upload a project ZIP containing populated credentials.

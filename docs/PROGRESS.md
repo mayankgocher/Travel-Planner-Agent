@@ -26,10 +26,21 @@ Updated: 3 November 2026 (India). Checkpoint 04: LangChain/Groq Supervisor intak
 - Checkpoint 04 adds validated Supervisor extraction/update schemas, real ChatGroq
   native structured output and a graph entry node. Natural-language clarification
   replies rerun Supervisor. Question/unsupported intents stop without searches.
-- Checkpoint 04: 45 offline tests passed on Linux Python 3.12.14, including actual
+- Checkpoint 04: 55 offline tests passed on Linux Python 3.12.14, including actual
   ChatGroq HTTP payloads intercepted locally, error handling, graph integration
   and live-check report generation using mocks. Demo and zero-request preview
   passed. No real Groq/travel calls were made; Windows/live checks remain pending.
+- User live check first had effective model llama3-70b-8192, rejected locally
+  before a request. Setting the effective model to openai/gpt-oss-120b reached
+  Groq but returned HTTP 400. Original error handling omitted the provider reason.
+  Diagnostic revision retains sanitized message/code/param/type through graph
+  and report, excludes failed generations, and makes no automatic retries. New
+  tests verify redaction and HTTP-400 diagnostics. Underlying rejection cause
+  was identified in the next live report: integer/number union overlap in the
+  preference-change value schema. Corrected to a single numeric schema branch;
+  whole-number fields normalize exact integral values and reject fractions.
+  Regression test failed before the fix and passed afterward. All 55 tests now
+  pass offline; next action is one explicit live verification of the schema fix.
 - Requirements unchanged. requirements-lock.txt is the Linux reference resolution,
   not a hash-locked cross-platform guarantee.
 

@@ -6,7 +6,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, StrictFloat, StrictStr
 
 from backend.llm import ModelCallError, invoke_structured
 from backend.schemas import TripPreferences
@@ -20,9 +20,11 @@ PreferenceField = Literal[
 
 
 class PreferenceChange(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     field: PreferenceField
-    value: StrictStr | StrictInt | StrictFloat | list[StrictStr] | None
+    # JSON Schema's number includes integers. Groq rejects a union containing
+    # both integer and number. Enforce field-specific whole numbers below.
+    value: StrictStr | StrictFloat | list[StrictStr] | None
 
 
 class SupervisorDecision(BaseModel):
@@ -47,7 +49,14 @@ def validated_patch(decision: SupervisorDecision, current: TripPreferences) -> d
     for update in decision.updates:
         if update.field in patch:
             raise ModelCallError("Duplicate preference updates; no preferences were applied.")
-        patch[update.field] = update.value
+        value = update.value
+        if update.field in ("adults", "hotel_class", "flight_sort_by") and value is not None:
+            # StrictFloat accepts JSON integers as floats. Convert only exact
+            # whole values; never truncate a fractional traveler/star count.
+            if type(value) is not float or not value.is_integer():
+                raise ModelCallError(f"{update.field} requires a whole number; nothing was applied.")
+            value = int(value)
+        patch[update.field] = value
     if decision.intent in ("question", "unsupported") and patch:
         raise ModelCallError("Message-only response cannot change preferences.")
     try:

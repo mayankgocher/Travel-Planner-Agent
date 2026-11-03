@@ -149,3 +149,20 @@ consumption. This is not a complete live multi-agent travel demo.
 References: https://console.groq.com/docs/structured-outputs and
 https://docs.langchain.com/oss/python/integrations/chat/groq . Tool selection and
 strict structured answering will use separate calls where required by Groq.
+
+HTTP diagnostic revision: safe_provider_error() keeps only message/code/param/type
+from structured provider errors. It redacts the current key before truncating,
+and never copies failed_generation or entire exception/body objects. A safe
+provider error travels through ModelCallError to state and the JSON report.
+This preserves the reason for a rejected request without exposing generated
+private content. Provider requests with a numeric failure status now have outcome
+PROVIDER_REQUEST_ERROR rather than being mislabeled as extraction-check failures.
+
+Confirmed schema correction: JSON Schema number also covers integers. Groq
+rejected the previous value union because it listed both integer and number.
+PreferenceChange now uses StrictFloat as its only numeric branch, so its schema
+contains number once. validated_patch() converts exact whole values to Python
+int for adults, hotel_class and flight_sort_by; fractional values, booleans and
+nonfinite numbers are rejected. The integer constraints in TripPreferences
+remain strict. A regression test walks the actual outgoing wrapper schema to
+catch the overlap before future live requests.

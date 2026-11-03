@@ -88,10 +88,12 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
         message = state.get("user_message", "")
         if not message:
             return {"supervisor_failed": False, "message_only": False,
-                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": None}
+                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": None,
+                    "supervisor_error_detail": None}
         if state.get("request_patch"):
             return {"user_message": "", "supervisor_failed": True, "status": "supervisor_error",
-                    "warnings": ["Supply either a user message or a structured patch, not both."]}
+                    "warnings": ["Supply either a user message or a structured patch, not both."],
+                    "supervisor_http_status": None, "supervisor_error_detail": None}
         try:
             if supervisor_worker is None:
                 raise ModelCallError("Natural-language intake is not configured for this graph.")
@@ -99,11 +101,13 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
         except ModelCallError as exc:
             return {"user_message": "", "supervisor_failed": True, "status": "supervisor_error",
                     "warnings": [str(exc)], "trace": ["Supervisor failed; prior preferences preserved."],
-                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": exc.http_status}
+                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": exc.http_status,
+                    "supervisor_error_detail": exc.provider_error}
         message_only = turn.decision.intent in ("question", "unsupported")
         return {"user_message": "", "request_patch": turn.patch, "supervisor_failed": False,
                 "message_only": message_only, "supervisor_decision": turn.decision.model_dump(),
                 "supervisor_http_status": None,
+                "supervisor_error_detail": None,
                 "model_usage": turn.usage, "status": "message_only" if message_only else "intake_complete",
                 "warnings": [], "trace": ["Supervisor interpreted the user request."]}
 

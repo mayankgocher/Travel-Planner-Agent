@@ -8,6 +8,7 @@ class TripState(TypedDict, total=False):
     model_usage: dict[str, int]
     supervisor_failed: bool
     supervisor_http_status: int | None
+    supervisor_error_detail: dict[str, str] | None
     message_only: bool
     request_patch: dict[str, Any]
     preferences: dict[str, Any]

@@ -8,12 +8,13 @@ import httpx
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
+from pydantic import ValidationError
 
 from backend import demo_workers
 from backend.agents.supervisor import PreferenceField, Supervisor, SupervisorDecision, validated_patch
 from backend.config import Settings
 from backend.graph.builder import build_workflow
-from backend.llm import ModelCallError, create_model
+from backend.llm import ModelCallError, create_model, safe_provider_error
 from backend.schemas import TripPreferences
 
 
@@ -66,6 +67,16 @@ def test_real_wrapper_sends_native_strict_schema_without_tools():
     wire = requests[0]
     assert wire["response_format"]["type"] == "json_schema"
     assert wire["response_format"]["json_schema"]["strict"] is True
+    def no_overlapping_numeric_union(node):
+        if isinstance(node, dict):
+            types = {s.get("type") for s in node.get("anyOf", []) if isinstance(s, dict) and isinstance(s.get("type"), str)}
+            assert not {"integer", "number"}.issubset(types), "Groq rejects integer/number overlap"
+            for value in node.values():
+                no_overlapping_numeric_union(value)
+        elif isinstance(node, list):
+            for value in node:
+                no_overlapping_numeric_union(value)
+    no_overlapping_numeric_union(wire["response_format"]["json_schema"]["schema"])
     assert "tools" not in wire and wire["include_reasoning"] is False
     assert len(requests) == 1 and "not-to-be-retained" not in str(turn)
 
@@ -77,6 +88,26 @@ def test_update_preserves_omitted_preferences_and_field_enum_is_complete():
     merged = TripPreferences.model_validate(current.model_dump() | patch)
     assert merged.nightly_max == 4000 and merged.origin == "Delhi" and merged.interests == ["history"]
     assert set(get_args(PreferenceField)) == set(TripPreferences.model_fields)
+
+
+@pytest.mark.parametrize("field,value", [("adults", 2.0), ("hotel_class", 3.0), ("flight_sort_by", 2.0)])
+def test_integral_numeric_updates_become_strict_domain_integers(field, value):
+    d = SupervisorDecision.model_validate(decision([update(field, value)]))
+    patch = validated_patch(d, TripPreferences())
+    assert patch[field] == int(value) and type(patch[field]) is int
+
+
+@pytest.mark.parametrize("field", ["adults", "hotel_class", "flight_sort_by"])
+def test_fractional_integer_fields_are_rejected_without_truncation(field):
+    d = SupervisorDecision.model_validate(decision([update(field, 2.5)]))
+    with pytest.raises(ModelCallError, match="whole number"):
+        validated_patch(d, TripPreferences())
+
+
+@pytest.mark.parametrize("value", [True, float("nan")])
+def test_boolean_and_nonfinite_updates_are_rejected(value):
+    with pytest.raises(ValidationError):
+        SupervisorDecision.model_validate(decision([update("adults", value)]))
 
 
 @pytest.mark.parametrize("updates", [
@@ -98,6 +129,7 @@ def test_bad_responses_fail_safely_without_automatic_retry(payload, status, fini
     with client, pytest.raises(ModelCallError) as caught:
         supervisor("Plan my trip.", TripPreferences())
     assert "fixture-secret" not in str(caught.value)
+    assert "fixture-secret" not in str(caught.value.provider_error)
     assert len(requests) == 1
 
 
@@ -177,3 +209,37 @@ def test_live_check_writes_parsed_report_with_intercepted_request(tmp_path, monk
     assert report["outcome"] == "PASS_CHECKS" and len(requests) == 1
     assert report["synthetic_downstream"] and report["model_usage"]["total_tokens"] == 180
     assert "fixture-secret" not in path.read_text() and "not-to-be-retained" not in path.read_text()
+
+
+def test_error_details_exclude_generation_and_redact_before_truncation():
+    secret = "fixture-secret-" * 100
+    body = {"error": {"message": "Schema rejected. " + secret + " wrong parameter",
+                      "code": "invalid_schema", "param": "response_format", "type": "invalid_request_error",
+                      "failed_generation": "private output", "request": {"Authorization": "Bearer " + secret}}}
+    details = safe_provider_error(body, secret)
+    assert set(details) == {"message", "code", "param", "type"}
+    assert "fixture-secret" not in str(details) and "private output" not in str(details)
+    assert details["message"] == "Schema rejected. [REDACTED] wrong parameter"
+    assert safe_provider_error("raw error body must not be copied", secret) == {}
+
+
+def test_http_400_reason_survives_graph_and_report_without_secrets(tmp_path, monkeypatch):
+    from scripts import check_supervisor as check
+    requests = []
+    def handle(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(400, json={"error": {"message": "Invalid response_format. fixture-secret",
+            "code": "invalid_schema", "param": "response_format", "type": "invalid_request_error",
+            "failed_generation": "private output"}})
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        settings = Settings(_env_file=None, groq_api_key="fixture-secret", data_dir=tmp_path)
+        model = create_model(settings, http_client=client)
+        monkeypatch.setattr(check, "Settings", lambda: settings)
+        monkeypatch.setattr(check, "create_model", lambda settings: model)
+        monkeypatch.setattr(check.sys, "argv", ["check_supervisor.py", "--live"])
+        assert check.main() == 2
+    report = json.loads(next((tmp_path / "reports").glob("*.json")).read_text())
+    assert len(requests) == 1 and report["outcome"] == "PROVIDER_REQUEST_ERROR"
+    assert report["supervisor_http_status"] == 400
+    assert report["supervisor_error_detail"]["code"] == "invalid_schema"
+    assert "fixture-secret" not in str(report) and "private output" not in str(report)

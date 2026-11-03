@@ -42,7 +42,7 @@ def main() -> int:
                                InMemorySaver(), Supervisor(create_model(settings), settings.app_timezone))
         result = graph.invoke({"user_message": MESSAGE},
                               {"configurable": {"thread_id": str(uuid4())}, "recursion_limit": 30})
-        for key in ("status", "preferences", "supervisor_decision", "supervisor_http_status", "model_usage", "trace", "warnings"):
+        for key in ("status", "preferences", "supervisor_decision", "supervisor_http_status", "supervisor_error_detail", "model_usage", "trace", "warnings"):
             report[key] = result.get(key)
         expected = {"origin": "Delhi", "destination": "Jaipur", "adults": 2,
                     "departure_date": "2027-02-10", "return_date": "2027-02-14",
@@ -60,6 +60,8 @@ def main() -> int:
         checks["workflow_reached_end"] = result.get("status") == "workflow_complete"
         report["checks"] = checks
         report["outcome"] = "PASS_CHECKS" if all(checks.values()) else "REVIEW_REQUIRED"
+        if result.get("supervisor_failed"):
+            report["outcome"] = "PROVIDER_REQUEST_ERROR" if result.get("supervisor_http_status") else "MODEL_RESPONSE_ERROR"
         # These are usage counters for this run, not full-app cost measurements.
         # Missing usage after a failed request means unknown consumption, not zero.
         if result.get("__interrupt__"):
@@ -73,6 +75,8 @@ def main() -> int:
     path = folder / ("supervisor_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f") + "_" + uuid4().hex[:6] + ".json")
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print("Outcome:", report["outcome"])
+    if report.get("supervisor_error_detail"):
+        print("Sanitized provider error:", report["supervisor_error_detail"])
     print("Usage:", report.get("model_usage") or "Unknown / no completed request reported")
     print("Share only this JSON report:", path)
     print("No real transport, hotel or place searches were made.")
