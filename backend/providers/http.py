@@ -49,7 +49,7 @@ class SerpApiHttp:
         started = time.monotonic()
         try:
             response = self._client.get("https://serpapi.com/search.json", params=params | {"api_key": self._key},
-                headers={"Accept": "application/json", "User-Agent": "TravelPlanningAgent/0.6"},
+                headers={"Accept": "application/json", "User-Agent": "TravelPlanningAgent/0.7"},
                 timeout=30, follow_redirects=False)
             event["http_status"] = response.status_code
             if len(response.content) > 2_000_000:

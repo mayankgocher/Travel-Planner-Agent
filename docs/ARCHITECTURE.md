@@ -1,7 +1,7 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 06 retains four LLM roles using explicitly synthetic graph
-retrieval and adds separate real hotel/Maps adapters with a bounded live checker.
+Status: Checkpoint 07 retains four LLM roles using explicitly synthetic graph
+retrieval and separate real hotel/Maps/flight adapters with a bounded live checker.
 The diagram remains the product blueprint: provider-to-graph integration, other
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
@@ -134,7 +134,9 @@ Clarification resumes accept a patch or natural-language reply. Its finalize nod
 saved product version or booking.
 Checkpoint 06 implements providers/http.py and providers/serpapi.py for hotel and
 Maps retrieval, plus scripts/check_providers.py and tests/test_providers.py.
-Flight/rail/weather providers and server/UI/version/export modules remain planned. Lock compatibility with changed offers
+Checkpoint 07 adds providers/flights.py, services/place_aliases.py and
+tests/test_flights.py. Rail/weather providers and server/UI/version/export modules
+remain planned. Lock compatibility with changed offers
 and graph enforcement remain pending; the primitive only detects replacement,
 removal and unlock attempts. No agent files are presented as working stubs.
 
@@ -197,3 +199,29 @@ one hotel search plus one Maps search, stopping on an error. It saves readable
 HTML and JSON with matching input parameters. It never substitutes fixture data.
 Return/arrival-based hotel dates, geographic validation, optional weather and
 integration with agent retrieval callbacks remain next-stage work.
+
+## Checkpoint 07 flight and source-quality boundary
+
+FlightAdapter receives explicit AirportLocation bindings (code, city, timezone)
+and searches one leg at a time. It validates the city route before spending a
+request, maps explicit class/sort/price filters, and uses type=2. Return calls
+reverse airports and use the return date. There is no round-trip token workflow.
+FlightSegment preserves carrier/flight number and aware departure/arrival times;
+the parser checks route, date, chronological order and airport continuity. Every
+airport's timezone must be supplied; unknown or ambiguous local times are skipped.
+General city-to-airport discovery and selection remain pending.
+
+Flight quotes preserve one-way scope but do not infer multi-passenger coverage or
+tax completeness. Python's existing complete-price cap check remains conservative.
+Search links are source pages, not reservations. The new --category flights probe
+makes at most two requests and does not call the LLM or change existing --category
+all behavior. Real provider retrieval is still separate from the four-agent graph.
+
+The hotel/Maps live report exposed a stale date-bearing hotel URL and nearby
+stepwell aliases with differing hours. Hotel links with explicit date/night/guest
+conflicts are discarded in favor of a general source URL, when available. Opaque
+link parameters are not verified, so no URL is described as guaranteed checkout.
+Place alias detection requires coordinates within 40 m plus matching normalized
+names or stepwell/kund synonyms. It flags possible duplicates without merging
+them. Schedules cannot include both flagged candidates; their hours stay unverified.
+This narrow heuristic is not a general geographic entity-resolution system.

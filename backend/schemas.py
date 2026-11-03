@@ -26,7 +26,7 @@ class TripPreferences(DomainModel):
     transport_mode: Literal["train", "flight", "compare"] | None = None
     train_class: Name | None = None
     flight_class: Name | None = None
-    flight_sort_by: Annotated[int, Field(strict=True, ge=0)] | None = None
+    flight_sort_by: Annotated[int, Field(strict=True, ge=1, le=6)] | None = None
     flight_max_price: Money | None = None
     hotel_class: Annotated[int, Field(strict=True, ge=1, le=5)] | None = None
     hotel_class_rule: Literal["exact", "at_least"] = "exact"
@@ -102,6 +102,22 @@ class HotelOffer(DomainModel):
         return self
 
 
+class FlightSegment(DomainModel):
+    departure_airport: Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+    arrival_airport: Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+    departure: AwareDatetime
+    arrival: AwareDatetime
+    flight_number: Name | None = None
+    airline: Name | None = None
+    travel_class: Name | None = None
+
+    @model_validator(mode="after")
+    def valid_times(self):
+        if self.arrival <= self.departure:
+            raise ValueError("Flight segment arrival must follow departure")
+        return self
+
+
 class TransportOffer(DomainModel):
     id: Name
     mode: Literal["train", "flight"]
@@ -115,6 +131,7 @@ class TransportOffer(DomainModel):
     seat_availability: Literal["unverified"] = "unverified"
     source: Source
     recommendation_reason: str | None = None
+    segments: list[FlightSegment] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def valid_journey(self):
@@ -150,3 +167,4 @@ class PlaceCandidate(DomainModel):
     longitude: Annotated[float, Field(ge=-180, le=180)] | None = None
     address: str | None = None
     rating: Annotated[float, Field(ge=0, le=5)] | None = None
+    possible_duplicate_ids: list[str] = Field(default_factory=list)

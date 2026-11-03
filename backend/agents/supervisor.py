@@ -85,8 +85,10 @@ clears a preference. Dates are YYYY-MM-DD, money in decimal strings, interests a
 list of strings; adults, hotel_class and flight_sort_by are JSON whole numbers,
 without units or star labels. Modes: train, flight, compare. Guest ratings
 are out of 5 and separate from star class. Map rupees to INR. Hotel class rule is
-exact unless the user explicitly says 'at least'/'and above'. Do not invent
-numeric provider sort codes from vague wording. Relative dates use today's date
+exact unless the user explicitly says 'at least'/'and above'. Flight sorting codes:
+1 top flights, 2 price, 3 departure time, 4 arrival time, 5 duration, 6 emissions.
+Map only an explicit sorting request; do not add sorting to vague wording.
+Relative dates use today's date
 and timezone supplied in context; ask if ambiguous. Do not invent a return date
 or duration. Ask a concise question when required details are missing.
 Use plan/update for trip creation or preference changes. Use question for a

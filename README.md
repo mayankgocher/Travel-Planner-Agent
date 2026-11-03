@@ -1,13 +1,14 @@
 # Multi-agent travel planner
 
-Checkpoint 06 — real hotel/place retrieval adapters and bounded checks, 3 November 2026.
+Checkpoint 07 — flight retrieval and live-report quality fixes, 3 November 2026.
 
 **This is not yet a complete travel application.** The Supervisor, Transportation,
 Hotel and Itinerary LLM roles are connected through LangGraph. Their existing
 four-role check still uses explicitly synthetic fixture data. Separate real
-SerpApi hotel and Maps adapters are now implemented and tested offline; they
-are not wired into the graph yet. Flight/rail/weather adapters, UI, selection
-locks, numbered versions and export remain pending. There are 108 offline tests.
+SerpApi hotel and Maps adapters passed a real retrieval check on Windows. Separate
+flight retrieval is now implemented and tested offline. Real providers are not
+wired into the graph yet. Rail/weather adapters, airport resolution, UI, selection
+locks, numbered versions and export remain pending. There are 142 offline tests.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
@@ -18,8 +19,11 @@ the checkpoint 03 demo completed after the test-discovery fix. The corrected Sup
 79 tests on Windows Python 3.12.7. Its four-role live check also passed: five
 Groq requests including one itinerary repair, 6,845 reported tokens, synthetic
 INR 20,100 subtotal and no unresolved validation errors. This does not establish
-live travel accuracy. Checkpoint 06 has 108 passing offline tests on Linux Python
-3.12.14; its Windows and real SerpApi checks remain pending.
+live travel accuracy. The user then verified the hotel/Maps live check: two HTTP
+200 responses, 18 hotels (14 matching all filters), 20 places. Occupancy, room
+type, taxes and unreturned weekday hours remain unverified. Checkpoint 07 has
+142 passing offline tests on Linux Python 3.12.14; Windows tests and its new
+flight retrieval check remain pending. Dependencies are unchanged.
 
 ## Read first
 
@@ -58,9 +62,9 @@ or Streamlit app launch command exists yet.
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.
 
-If you already installed checkpoint 05 successfully, keep the existing venv:
+If you already installed checkpoint 06 successfully, keep the existing venv:
 dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
-`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 06.
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 07.
 Tests use temporary fixture keys and do not load your real .env. No live API
 calls occur. The demo uses in-memory checkpoints only; a test separately verifies
 SQLite persistence across graph rebuilds. Demo results are not travel offers.
@@ -115,6 +119,9 @@ need not be rerun if already passed.
 
 ## New: hotel and places retrieval check
 
+This check already passed on the user's Windows machine. No repeat is needed
+for installing checkpoint 07. The commands below remain available for diagnosis.
+
 After offline tests pass, fill `SERPAPI_API_KEY` in your local `.env` using your
 existing SerpApi key. Keep all other keys as they are. Do not paste keys in chat.
 There are no dependency changes and no need to recreate your venv.
@@ -150,6 +157,49 @@ private room type, tax completeness, seat availability or a complete trip price.
 API failed. Empty/error results require review rather than invented replacements.
 No stay total is manufactured by multiplying a nightly average. These adapters
 keep unknown evidence explicit; the graph's synthetic fixtures are unchanged.
+
+## New: outbound and return flight retrieval check
+
+Use the existing local SERPAPI_API_KEY. Do not recreate the venv or rerun the
+already-passed hotel/Maps/Groq checks for this step.
+
+```powershell
+.\venv\Scripts\python.exe scripts\check_providers.py --category flights
+.\venv\Scripts\python.exe scripts\check_providers.py --live --category flights
+```
+
+Preview makes zero calls. Live makes at most two SerpApi requests: Delhi DEL to
+Jaipur JAI, then JAI to DEL, as independent one-way searches, two adults, Economy,
+price sorting. Departure defaults to 14 days after execution; return three days
+later. A future `--check-in YYYY-MM-DD` sets the departure date. These are explicit
+probe inputs, not preferences inferred from a user. Existing `--category all`
+still means only hotels and places (two requests), not flights.
+
+The checker saves the same HTML/JSON/share ZIP format, with each leg's own input
+parameters, airlines, flight numbers, segment times, quotes and source timestamps.
+Stop on an error, no automatic retries, no Groq/rail/booking/airport-lookup calls.
+Share only the printed `share_results.zip`. Each live rerun makes fresh requests.
+
+Automatic city-to-airport resolution is pending. The adapter requires explicit
+airport/city/timezone bindings. The probe supplies DEL/JAI and known timezone
+bindings for 15 possible Indian connecting airports. Unknown airport timezones,
+airport-change transfers, inconsistent segment sequences and ambiguous DST times
+are skipped with warnings, not guessed. This is not worldwide flight support.
+
+One-way results are kept separate; the program does not divide a round-trip quote
+or claim that two one-way tickets are an airline round-trip bundle. Quoted fares
+are not multiplied by passenger count. Multi-passenger coverage, taxes, baggage
+and booking fees remain unverified unless evidence establishes them. Complete
+budget feasibility therefore remains unknown. Explicit flight caps map to API
+max_price, but Python cannot claim a total cap is met with an incomplete quote.
+The default probe has no price cap. Flight sorting is validated as codes 1–6.
+
+Checkpoint 07 also rejects hotel website links with explicitly conflicting stay
+parameters, using a general source link when available. Source links are never
+claimed as checkout/payment URLs. Nearby likely stepwell aliases are flagged;
+the itinerary validator prevents scheduling both and keeps their hours unverified.
+This heuristic does not automatically merge nearby distinct attractions. Partial
+weekday schedules now have an explicit missing-hours warning.
 
 Add keys locally only when live integration testing begins. Never paste them in
 chat, commit `.env`, or upload a project ZIP containing populated credentials.

@@ -232,3 +232,63 @@ def test_failed_first_request_stops_second_and_saves_audit(tmp_path):
     report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text())
     assert result == 2 and len(calls) == len(report["requests"]) == len(report["cases"]) == 1
     assert report["cases"][0]["outcome"] == "PROVIDER_ERROR"
+
+
+def test_conflicting_hotel_link_is_replaced_by_general_source_not_presented_as_selected_stay():
+    body = hotel_body()
+    body["properties"][0]["link"] = "https://booking.example.com/24685/?checkin=26-08-2026&num_nights=1&num_guests=2"
+    result = parse_hotels(response(body), preferences(), "INR")
+    hotel = result.items[0]
+    assert str(hotel.source.url) == "https://www.google.com/travel/hotels"
+    assert any("conflicting stay" in note for note in hotel.price.notes)
+    assert any("conflicting stay" in warning for warning in result.warnings)
+
+
+def test_matching_hotel_link_is_kept_but_does_not_verify_quote_completeness():
+    body = hotel_body()
+    body["properties"][0]["link"] = "https://booking.example.com/?checkin=10-02-2027&checkout=13-02-2027&num_nights=3&num_guests=2"
+    hotel = parse_hotels(response(body), preferences(), "INR").items[0]
+    assert hotel.source.url.host == "booking.example.com" and not hotel.price.complete
+
+
+def test_conflicting_link_without_fallback_remains_unknown():
+    body = hotel_body(); body["search_metadata"] = None
+    body["properties"][0]["link"] = "https://booking.example.com/?check_in_date=2026-08-26"
+    hotel = parse_hotels(response(body), preferences(), "INR").items[0]
+    assert hotel.source.url is None and any("no compatible source link" in note for note in hotel.price.notes)
+
+
+def alias_body():
+    return {"local_results": [
+        {"place_id": "stepwell-a", "title": "Amer Stepwell", "gps_coordinates": {"latitude": 26.991213, "longitude": 75.851147},
+         "operating_hours": {"wednesday": "Open 24 hours"}},
+        {"place_id": "stepwell-b", "title": "Panna Meena ka Kund", "gps_coordinates": {"latitude": 26.9912058, "longitude": 75.8512432},
+         "operating_hours": {"wednesday": "7 AM–6 PM"}},
+        {"place_id": "museum", "title": "A Nearby Museum", "gps_coordinates": {"latitude": 26.991213, "longitude": 75.851147}}]}
+
+
+def test_nearby_stepwell_aliases_are_flagged_without_merging_distinct_attractions():
+    result = parse_places(response(alias_body()))
+    a, b, museum = result.items
+    assert a.possible_duplicate_ids == [b.id] and b.possible_duplicate_ids == [a.id]
+    assert not museum.possible_duplicate_ids and len(result.items) == 3
+    assert any("Possible aliases" in warning for warning in result.warnings)
+
+
+def test_alias_pair_cannot_be_scheduled_twice_and_conflicting_hours_stay_unverified():
+    from backend.specialist_fixtures import transport
+    from backend.services.scheduling import Schedule, validate_schedule
+    p = preferences(); candidates = parse_places(response(alias_body())).items
+    outward, returning = transport(p)[:2]
+    first = dict(place_id=candidates[0].id, date="2027-02-10", start="15:00", end="16:00")
+    second = dict(place_id=candidates[1].id, date="2027-02-10", start="16:30", end="17:00")
+    errors, warnings = validate_schedule(Schedule(activities=[first, second], notes=[]), candidates, outward, returning, p, "Asia/Kolkata")
+    assert any("duplicate attractions" in error for error in errors)
+    errors, warnings = validate_schedule(Schedule(activities=[first], notes=[]), candidates, outward, returning, p, "Asia/Kolkata")
+    assert not errors and any("Opening hours unverified" in warning for warning in warnings)
+
+
+def test_partial_weekday_hours_are_labelled_unverified_for_missing_days():
+    result = parse_places(response(maps_body()))
+    assert result.items[0].weekly_hours.get(4) is None
+    assert any("weekday hours are unverified" in warning for warning in result.warnings)

@@ -1,8 +1,8 @@
-# Checkpoint 06 walkthrough
+# Checkpoint 07 walkthrough
 
 Four LLM roles, graph orchestration and draft schedule/cost checks are implemented
-using synthetic graph retrieval. Separate real hotel/Maps adapters are implemented;
-graph wiring, other providers, user selections/locks, plan versions and UI remain
+using synthetic graph retrieval. Separate real hotel/Maps/flight adapters are implemented;
+graph wiring, rail/weather, user selections/locks, plan versions and UI remain
 pending. Earlier sections describe foundation modules;
 the checkpoint 05 section below describes the current specialist path.
 
@@ -258,4 +258,50 @@ script rather than new agents or endpoint-specific graph nodes.
 `tests/test_providers.py` intercepts actual httpx requests with MockTransport and
 blocks real sockets. Tests cover parameter mapping, scope mismatches, taxes,
 missing prices, hours, duplicates, errors, one/two-request limits and safe report
-sharing. The entire suite has 108 tests; Windows/live retrieval is the next check.
+sharing. The checkpoint 06 suite had 108 tests. Its live hotel/Maps check passed
+on Windows; the latest checkpoint has 142 offline tests.
+
+## Checkpoint 07: follow a flight search
+
+`check_providers.py --category flights` previews. Adding `--live` makes at most
+two requests using explicit DEL/JAI AirportLocation objects. Other categories
+retain their prior request counts. No new agent, graph node or dependency is added.
+
+1. `FlightAdapter.search_leg()` checks the supplied airport cities match the
+   requested direction, requires dates/adults and rejects unsupported cabins.
+   It maps explicit preferences and calls the same SerpApiHttp boundary once.
+   The return call reverses airports and uses p.return_date.
+2. `parse_flights()` rejects echoed route/date/currency/passenger mismatches and
+   round-trip scope. It combines best_flights/other_flights, not outward/return
+   trips. Each result still describes only the requested one-way leg.
+3. Each segment becomes a FlightSegment: IATA codes, local times with explicit
+   zones, flight number, airline and class. Date/order/continuity checks prevent
+   stitching unrelated segments. Overnight dates are preserved. Unknown airport
+   zones, ambiguous/nonexistent DST clocks and airport-change transfers are
+   skipped with a warning rather than guessed. The probe configures 15 Indian
+   connection zones; this is not an airport resolver or worldwide lookup table.
+4. The quote amount is used as returned, never multiplied by adults. Multi-person
+   coverage and taxes stay unverified, so final affordability is unknown. Python
+   still refuses to claim a complete price cap is met with an incomplete quote.
+5. Each report case receives only its own request-ledger slice, so the return
+   case does not accidentally repeat outbound inputs. HTML adds a flight table;
+   normalized JSON retains segment and price evidence. Booking tokens are not saved.
+
+`TripPreferences.flight_sort_by` is now restricted to 1–6. The Supervisor prompt
+provides the mapping for explicit sorting requests; it does not invent a default
+preference. Probe defaults are explicit test inputs, not user extraction.
+
+`hotel_source_link()` compares recognized date/night/guest URL parameters with
+the requested stay. Conflicting links are discarded and noted; a general source
+link is used when present. This cannot verify opaque query tokens or checkout.
+
+`services/place_aliases.py` flags close coordinate pairs only when names match
+or both contain stepwell synonyms. The parser stores possible_duplicate_ids on
+both records. validate_schedule() prevents scheduling both and treats their
+hours as unverified. No model call or API lookup is needed for these rules.
+Distinct nearby museums/palaces are not merged just because they are close.
+
+The latest tests include actual intercepted HTTP parameter mapping, both leg
+directions, fare scope, segments, overnight dates, timezone errors, conservative
+caps, duplicate sources, bounded failure behavior and the live-report regressions.
+Automatic airport resolution, rail, weather and graph live retrieval remain next.

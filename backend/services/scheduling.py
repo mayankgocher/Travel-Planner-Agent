@@ -23,6 +23,9 @@ class Schedule(BaseModel):
 def validate_schedule(schedule, places, outward, returning, p, timezone):
     errors, warnings, intervals, seen = [], [], [], set()
     known = {place.id: place for place in places}
+    selected = {activity.place_id for activity in schedule.activities}
+    if any(selected.intersection(known[id].possible_duplicate_ids) for id in selected if id in known):
+        errors.append("Possible duplicate attractions: schedule only one candidate from each flagged alias pair.")
     tz = ZoneInfo(timezone)
     if not schedule.activities:
         errors.append("Schedule must contain an activity from the supplied candidates.")
@@ -43,7 +46,9 @@ def validate_schedule(schedule, places, outward, returning, p, timezone):
             errors.append("Activity outside trip dates or has invalid duration.")
         if start < outward.arrival + timedelta(hours=1) or end > returning.departure - timedelta(hours=1):
             errors.append("Activity violates the 60-minute arrival/departure buffer.")
-        windows = known[activity.place_id].weekly_hours.get(day.weekday())
+        place = known[activity.place_id]
+        # Conflicting listings must not make a 24-hour alias look verified.
+        windows = None if place.possible_duplicate_ids else place.weekly_hours.get(day.weekday())
         if windows is None:
             warnings.append("Opening hours unverified: " + activity.place_id)
         else:

@@ -1,7 +1,7 @@
 # API evidence and integration boundaries
 
 These findings summarize the earlier probe runs reviewed in this conversation.
-The application now has separate hotel/Maps adapters; graph retrieval still uses
+The application now has separate hotel/Maps/flight adapters; graph retrieval still uses
 synthetic data. Keys and raw private
 responses are excluded. Evidence is feasibility testing, not a reliability SLA.
 
@@ -90,9 +90,10 @@ successful scenario, not an accuracy score. Seat availability stays unverified.
 ## Checkpoint 06 contracts
 
 Hotel and Maps adapters now pass intercepted-HTTP tests; full suite 108 tests.
-No real provider calls were made in this build environment. Windows execution and
-the new real hotel/Maps check are pending user verification. Flight/RailRadar/
-weather adapters and LangChain tool-use integration remain pending.
+No real provider calls were made in this build environment. The user subsequently
+ran the hotel/Maps check on Windows: PASS_CHECKS, exactly two HTTP 200 responses.
+Flight integration followed in checkpoint 07; RailRadar/weather adapters and
+LangChain tool-use integration remain pending.
 
 Current hotel documentation was checked during implementation:
 https://serpapi.com/google-hotels-api and https://serpapi.com/google-hotels-properties .
@@ -114,3 +115,38 @@ not fetched; malformed or ambiguous hours stay unknown. Exact IDs deduplicate
 identical records, but alternate IDs for nearby aliases are not yet merged.
 The two-call checker saves only normalized data and field names, with request
 inputs, source/fetch timestamps and warnings; no raw provider bodies or secrets.
+
+## Reviewed checkpoint 06 live report
+
+Run providers_20261103_171503_728051_43edf0: Jaipur, 17–20 November 2026, two
+adults, exactly 3 stars, INR 2,000–4,000 nightly, guest rating at least 4.2.
+18 normalized hotels; 14 pass every requested listing filter. Four 4.1-rated
+properties were correctly excluded by Python after the API's broader 4+ filter.
+20 normalized places with coordinates; all have only three parsed weekday entries
+(Tuesday–Thursday), so other weekdays remain unknown. No complete payable hotel
+totals were established: occupancy/type and tax inclusion remain unverified.
+
+One hotel's website URL carried checkin=26-08-2026 and num_nights=1, conflicting
+with this three-night November search. That is a source-link quality issue, not
+proof that the API's returned quote was for August. Checkpoint 07 discards the
+conflicting URL. Generic fallback search links may not preserve selected dates.
+Amer Stepwell / Panna Meena ka Kund are about 10 m apart with differing reported
+hours. They are now flagged as possible aliases, not asserted to be identical.
+No additional live queries were needed to identify or test these issues.
+
+## Checkpoint 07 flight contract
+
+Primary docs checked: https://serpapi.com/google-flights-api and
+https://serpapi.com/google-flights-results . One-way searches use type=2; sorting
+codes are 1 top, 2 price, 3 departure, 4 arrival, 5 duration, 6 emissions. Explicit
+class and max_price parameters are supported in the adapter. It never treats an
+outbound-only round-trip result as a complete outbound/return pair. There is no
+booking-options request or invented payment URL.
+
+The new checker uses two separate one-way requests for DEL/JAI. Their combination
+is not a bundled round-trip fare. Native price fields do not establish tax/baggage/
+booking fee completeness; multi-passenger coverage is kept unverified. Currency
+and passenger/date/route echo mismatches are rejected. Unknown prices stay null.
+Airport bindings are explicit; resolving arbitrary user cities is still pending.
+Connection airport timezones must be known; airport-change transfers are skipped.
+New flight retrieval is offline-tested only; real Windows verification is next.

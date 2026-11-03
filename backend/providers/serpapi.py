@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from backend.providers.http import ProviderError
 from backend.schemas import HotelOffer, PlaceCandidate, PriceQuote, Source
+from backend.services.place_aliases import possible_alias_pairs
 
 
 @dataclass
@@ -73,6 +74,28 @@ def rate(data):
     return None, None
 
 
+def hotel_source_link(item, metadata, p):
+    """Reject explicitly conflicting stay links; never claim a source URL is checkout."""
+    link = public_link(item.get("link"))
+    if link:
+        expected = {"checkin": p.departure_date, "checkindate": p.departure_date,
+                    "checkout": p.return_date, "checkoutdate": p.return_date,
+                    "numnights": (p.return_date - p.departure_date).days, "numguests": p.adults}
+        for key, value in parse_qsl(urlsplit(link).query):
+            normalized = re.sub(r"[^a-z]", "", key.casefold())
+            if normalized not in expected:
+                continue
+            target = expected[normalized]
+            acceptable = {str(target)} if isinstance(target, int) else {
+                target.isoformat(), target.strftime("%d-%m-%Y"), target.strftime("%m/%d/%Y"), target.strftime("%d/%m/%Y")}
+            if value not in acceptable:
+                fallback = public_link(metadata.get("google_hotels_url")) if isinstance(metadata, dict) else None
+                note = "Hotel website URL contained conflicting stay parameters; "
+                return fallback, note + ("using a general source search link instead." if fallback else "no compatible source link is available.")
+    fallback = public_link(metadata.get("google_hotels_url")) if isinstance(metadata, dict) else None
+    return link or fallback, None
+
+
 def parse_hotels(response, p, currency):
     body = response.data
     properties = body.get("properties", [])
@@ -107,10 +130,13 @@ def parse_hotels(response, p, currency):
             if taxes is not True:
                 notes.append("Taxes and fees are not verified as included in this quoted total.")
             metadata = body.get("search_metadata")
-            search_url = metadata.get("google_hotels_url") if isinstance(metadata, dict) else None
+            link, link_warning = hotel_source_link(item, metadata, p)
+            if link_warning:
+                notes.append(link_warning)
+                warnings.append(name + ": " + link_warning)
             source = Source(provider="serpapi_google_hotels", fetched_at=response.fetched_at,
                 provider_data_at=provider_time(body), source_id=id,
-                url=public_link(item.get("link")) or public_link(search_url))
+                url=link)
             offer = HotelOffer(id=id, name=name, city=p.destination, check_in=p.departure_date, check_out=p.return_date,
                 adults=p.adults, hotel_class=stars, guest_rating=item.get("overall_rating"),
                 nightly_price=nightly, room_type=None, price=PriceQuote(amount=total, currency=currency,
@@ -200,8 +226,12 @@ def parse_places(response):
             places.append(place); seen.add(id)
         except (ValidationError, ValueError, TypeError):
             warnings.append(f"Skipped malformed place record at index {index}.")
-    if any(not p.weekly_hours for p in places):
-        warnings.append("Some place hours are unverified; a current open/closed label is not a weekly schedule.")
+    for a, b in possible_alias_pairs(places):
+        a.possible_duplicate_ids.append(b.id)
+        b.possible_duplicate_ids.append(a.id)
+        warnings.append(f"Possible aliases: {a.name} / {b.name}. Do not schedule both; their hours need review.")
+    if any(len(p.weekly_hours) < 7 for p in places):
+        warnings.append("Some weekday hours are unverified; a current open/closed label is not a weekly schedule.")
     warnings.append("Admission fees were not fetched or verified. Geographic relevance and nearby aliases need review.")
     return SearchResult(places, warnings, {"top_level_keys": list(body),
         "first_place_keys": list(rows[0]) if rows and isinstance(rows[0], dict) else []})
