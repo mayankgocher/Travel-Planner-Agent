@@ -1,7 +1,8 @@
-# Checkpoint 03 walkthrough
+# Checkpoint 04 walkthrough
 
-The domain foundation and graph orchestration are implemented. Live LLM agents,
-provider clients, offer selection, plan validation and UI are not implemented yet.
+The domain foundation, graph orchestration and optional Groq Supervisor intake
+are implemented. The other three LLM agents, provider clients, offer selection,
+plan validation and UI are not implemented yet.
 
 ## Read in order
 
@@ -106,3 +107,45 @@ can pause for as long as needed without issuing model/provider calls.
 Demo command: `venv\Scripts\python.exe scripts\demo_workflow.py`.
 Expected: missing-date clarification, workflow_complete, then an interests-only
 change whose trace contains no repeat transport/hotel work. No API keys required.
+
+## Supervisor integration in checkpoint 04
+
+A new supervisor graph node runs before prepare. With a configured Supervisor,
+user_message becomes a validated preference patch and is cleared after processing
+to avoid repeated calls. Existing structured request_patch input still skips the
+LLM. A natural-language clarification reply also passes through Supervisor before
+prepare; structured resume dictionaries continue working. Failed model calls
+leave prior preferences unchanged. Message-only decisions stop before specialists.
+
+backend/llm.py creates ChatGroq only on explicit request. invoke_structured uses
+native JSON schema with strict=True and no tools attached. Intercepted-HTTP tests
+verify the pinned wrapper sends this format, but live provider access and actual
+model semantics remain pending. Optional hosted tracing is explicitly disabled.
+
+backend/agents/supervisor.py returns intent plus preference updates. Allowed field
+names are enumerated. Duplicate updates, invalid merged constraints and attempts
+to modify preferences in a question/unsupported decision are rejected. Omitted
+preferences remain unchanged. Multi-city/payment requests are prompted as
+unsupported; this semantic classification needs live evaluation, not just tests
+of the schema. Hotel class remains separate from guest rating.
+
+A schema-valid answer can still contain an incorrectly extracted city/date;
+representative extraction evaluations and user review remain necessary. The
+Supervisor does not bypass Python routing or mandatory-field checks. Its final
+plan explanation and remaining delegation responsibilities will be added later.
+
+Model/API failures expose safe messages and optional numeric HTTP status, not
+raw provider responses. State may retain parsed decisions and token counters,
+never private reasoning. The first integration check uses one attempt, zero
+automatic retries and a 45-second HTTP timeout; it does not inherit the old
+five-request/day cap or fixed 65-second delay.
+
+scripts/check_supervisor.py without --live loads no configuration/model. With
+--live, it makes one Supervisor request for a fixed sample, then uses explicitly
+synthetic downstream workers. It saves a unique JSON under ignored data/reports/
+with parsed preferences, checks and usage. Missing usage on failure is unknown
+consumption. This is not a complete live multi-agent travel demo.
+
+References: https://console.groq.com/docs/structured-outputs and
+https://docs.langchain.com/oss/python/integrations/chat/groq . Tool selection and
+strict structured answering will use separate calls where required by Groq.

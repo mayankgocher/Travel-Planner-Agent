@@ -1,8 +1,8 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 03 implements structured intake, clarification interrupts,
-work routing and shared state, exercised with synthetic workers. The diagram
-below remains the product blueprint: the LLM Supervisor and specialists,
+Status: Checkpoint 04 adds optional LangChain/Groq Supervisor intake before the
+structured validation/clarification/routing from checkpoint 03. The diagram
+below remains the product blueprint: the other three LLM specialists,
 selection, plan validation/repair and snapshot finalization are not connected yet.
 
 ## Responsibilities
@@ -124,8 +124,10 @@ unverified provider information and excluded from the core subtotal.
 Implemented in checkpoint 02: backend/config.py, backend/schemas.py,
 backend/services/costs.py, backend/services/replanning.py and tests/test_domain.py.
 Checkpoint 03 adds backend/graph/state.py and builder.py, synthetic demo workers,
-scripts/demo_workflow.py and tests/test_workflow.py. Intake currently accepts
-structured fields instead of natural-language messages. Its finalize node marks
+scripts/demo_workflow.py and tests/test_workflow.py. Checkpoint 04 adds backend/llm.py,
+backend/agents/supervisor.py, tests/test_supervisor.py and scripts/check_supervisor.py.
+Intake accepts structured patches or natural language with a configured Supervisor.
+Clarification resumes accept a patch or natural-language reply. Its finalize node marks
 workflow completion, not a validated travel plan or saved product version.
 The remaining module map is planned. Lock compatibility with changed offers
 and graph enforcement remain pending; the primitive only detects replacement,
@@ -139,5 +141,5 @@ removal and unlock attempts. No agent files are presented as working stubs.
 - https://console.groq.com/docs/structured-outputs
 
 Separate tool selection and final structured-answer calls where required by the
-selected Groq model. Validate the LangChain wrapper path during agent integration;
+selected Groq model. The Supervisor wrapper path is tested with intercepted HTTP;
 the earlier successful Groq tests used raw HTTP, not this framework integration.

@@ -61,7 +61,9 @@ these historical numbers. SerpApi and RailRadar allowances remain independent.
 
 ## Still to verify
 
-- LangChain ChatGroq tool/structured-output calls with the selected model.
+- ChatGroq structured output: checkpoint 04 verifies the actual wrapper HTTP
+  payload with intercepted requests. Live Supervisor verification and the
+  specialist tool-use path remain pending.
 - Station autocomplete, ambiguous city/station handling and application adapters.
 - Requested return journeys: normalize outbound and return offers separately.
 - Real occupancy/room completeness, taxes and booking/source link rendering.

@@ -1,7 +1,7 @@
 """Readable orchestration tested with injected, explicitly synthetic workers.
 
-No LLM agent is implemented here yet. The deterministic intake node will be
-preceded by the Supervisor's natural-language extraction in a later checkpoint.
+An optional Supervisor turns natural language into validated preference updates.
+Other LLM specialists/provider adapters are not integrated yet.
 """
 from collections.abc import Callable
 
@@ -10,6 +10,8 @@ from langgraph.types import interrupt
 from pydantic import ValidationError
 
 from backend.graph.state import TripState
+from backend.agents.supervisor import SupervisorTurn
+from backend.llm import ModelCallError
 from backend.schemas import HotelOffer, TransportOffer, TripPreferences
 from backend.services.costs import summarize_costs
 from backend.services.replanning import affected_components
@@ -30,7 +32,7 @@ def prepare(state: TripState) -> dict:
         return {"request_patch": {}, "input_error": "Please correct: " + ", ".join(fields),
                 "missing_fields": previous.missing_required(), "status": "needs_input",
                 "trace": ["Input validation requested clarification."]}
-    first_plan = "preferences" not in state or state.get("status") == "needs_input"
+    first_plan = "preferences" not in state or not state.get("itinerary")
     affected = ({"transport", "hotels", "places", "weather", "itinerary", "costs"}
                 if first_plan else affected_components(previous, preferences))
     # Places/weather work belongs inside the Itinerary specialist. Pass its
@@ -40,7 +42,8 @@ def prepare(state: TripState) -> dict:
                "missing_fields": preferences.missing_required(), "input_error": None,
                "pending": pending, "invalidated": sorted(affected), "warnings": [],
                "status": "needs_input" if preferences.missing_required() else "planning",
-               "trace": ["Validated structured preferences."]}
+               "trace": (["Supervisor interpreted the user request."] if state.get("supervisor_decision") else [])
+                        + ["Validated structured preferences."]}
     # Invalidated data must not be offered as fresh evidence during replanning.
     if "transport" in affected:
         updates["transport"] = []
@@ -54,9 +57,12 @@ def prepare(state: TripState) -> dict:
 
 
 def clarify(state: TripState) -> dict:
+    decision = state.get("supervisor_decision") or {}
     response = interrupt({"kind": "clarification", "missing_fields": state.get("missing_fields", []),
-                          "message": state.get("input_error") or "Please supply the missing trip details."})
+                          "message": state.get("input_error") or decision.get("clarification_question") or "Please supply the missing trip details."})
     # The node restarts when resumed. It has no side effects before interrupt().
+    if isinstance(response, str):
+        return {"user_message": response, "request_patch": {}}
     if not isinstance(response, dict):
         return {"request_patch": {}, "input_error": "Reply with structured trip fields.",
                 "status": "needs_input"}
@@ -70,12 +76,40 @@ def dispatch(state: TripState) -> str:
 
 
 def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
-                   itinerary_worker: ItineraryWorker, checkpointer):
+                   itinerary_worker: ItineraryWorker, checkpointer,
+                   supervisor_worker: Callable[[str, TripPreferences], SupervisorTurn] | None = None):
     """Workers do the task; this graph enforces the sequence and state updates.
 
     The caller owns the checkpointer's lifetime. No in-memory fallback silently
-    substitutes for durable storage. Checkpoint 03 uses synthetic workers only.
+    substitutes for durable storage. Only Supervisor has a live LLM path in
+    checkpoint 04; demo specialists remain explicitly synthetic.
     """
+    def supervise(state: TripState) -> dict:
+        message = state.get("user_message", "")
+        if not message:
+            return {"supervisor_failed": False, "message_only": False,
+                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": None}
+        if state.get("request_patch"):
+            return {"user_message": "", "supervisor_failed": True, "status": "supervisor_error",
+                    "warnings": ["Supply either a user message or a structured patch, not both."]}
+        try:
+            if supervisor_worker is None:
+                raise ModelCallError("Natural-language intake is not configured for this graph.")
+            turn = supervisor_worker(message, TripPreferences.model_validate(state.get("preferences", {})))
+        except ModelCallError as exc:
+            return {"user_message": "", "supervisor_failed": True, "status": "supervisor_error",
+                    "warnings": [str(exc)], "trace": ["Supervisor failed; prior preferences preserved."],
+                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": exc.http_status}
+        message_only = turn.decision.intent in ("question", "unsupported")
+        return {"user_message": "", "request_patch": turn.patch, "supervisor_failed": False,
+                "message_only": message_only, "supervisor_decision": turn.decision.model_dump(),
+                "supervisor_http_status": None,
+                "model_usage": turn.usage, "status": "message_only" if message_only else "intake_complete",
+                "warnings": [], "trace": ["Supervisor interpreted the user request."]}
+
+    def after_supervisor(state: TripState) -> str:
+        return END if state.get("supervisor_failed") or state.get("message_only") else "prepare"
+
     def transport(state: TripState) -> dict:
         try:
             offers = transport_worker(TripPreferences.model_validate(state["preferences"]))
@@ -120,14 +154,16 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
                 "trace": state["trace"] + ["Workflow complete; offer selection and plan validation still pending."]}
 
     builder = StateGraph(TripState)
+    builder.add_node("supervisor", supervise)
     builder.add_node("prepare", prepare)
     builder.add_node("clarify", clarify)
     builder.add_node("transport", transport)
     builder.add_node("hotels", hotels)
     builder.add_node("itinerary", itinerary)
     builder.add_node("finalize", finalize)
-    builder.add_edge(START, "prepare")
-    builder.add_edge("clarify", "prepare")
+    builder.add_edge(START, "supervisor")
+    builder.add_conditional_edges("supervisor", after_supervisor, {END: END, "prepare": "prepare"})
+    builder.add_edge("clarify", "supervisor")
     routes = {name: name for name in ("clarify", "transport", "hotels", "itinerary", "finalize")}
     for node in ("prepare", "transport", "hotels", "itinerary"):
         builder.add_conditional_edges(node, dispatch, routes)

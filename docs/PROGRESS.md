@@ -1,8 +1,13 @@
 # Progress and continuation checkpoint
 
-Updated: 3 November 2026 (India). Checkpoint 03: tested workflow orchestration.
+Updated: 3 November 2026 (India). Checkpoint 04: LangChain/Groq Supervisor intake.
 
 ## Completed and verified
+
+- Checkpoint 03 installation exposed a test-discovery bug on Windows: pytest
+  recursively collected duplicate test modules inside installer backups. Added
+  pytest.ini to scope discovery to tests/ and ignore backup_*/; .gitignore also
+  excludes backup directories. No backup deletion or venv recreation is needed.
 
 - Checkpoint 01: architecture, environment templates, dependencies, smoke check.
 - User verified dependency installation, pip check, imports and conditional graph
@@ -16,27 +21,38 @@ Updated: 3 November 2026 (India). Checkpoint 03: tested workflow orchestration.
 - Checkpoint 03: 29 tests passed on Linux Python 3.12.14, plus the synthetic
   command-line workflow demo. New tests cover clarification, resumption, partial
   failure, no-change turns, selective rerouting, SQLite rebuild/resume and trip
-  isolation. Windows verification of these new tests remains pending.
+  isolation. User later reported demo completion after the discovery fix; the
+  full Windows pytest summary was not included in that message.
+- Checkpoint 04 adds validated Supervisor extraction/update schemas, real ChatGroq
+  native structured output and a graph entry node. Natural-language clarification
+  replies rerun Supervisor. Question/unsupported intents stop without searches.
+- Checkpoint 04: 45 offline tests passed on Linux Python 3.12.14, including actual
+  ChatGroq HTTP payloads intercepted locally, error handling, graph integration
+  and live-check report generation using mocks. Demo and zero-request preview
+  passed. No real Groq/travel calls were made; Windows/live checks remain pending.
 - Requirements unchanged. requirements-lock.txt is the Linux reference resolution,
   not a hash-locked cross-platform guarantee.
 
 ## Still planned, not implemented
 
-Live LLM agents, provider clients,
+Transportation/Hotel/Itinerary LLM agents, provider clients,
 FastAPI routes, Streamlit, retained-lock compatibility checking, persistent trip
 state, snapshots, stale-version protection, timing validation/repair, Markdown
 export and systematic evaluation. These remain included in scope. The new
 lock function remains a primitive; the graph uses replanning dependencies but
 does not yet enforce locks, select offers or validate travel plans. Structured
-intake, clarification and routing are implemented using synthetic workers.
+intake, clarification and routing are implemented. Supervisor can use Groq;
+the three downstream workers remain synthetic. Supervisor currently covers intake,
+not final grounded explanations or the entire planned delegation behavior.
 
 ## Exact next steps
 
 1. Completed in checkpoint 03: shared state, intake validation, clarification and
    conditional routing with synthetic workers. Application server integration and
    full trip lifecycle are pending.
-2. Implement four agents and ChatGroq tool/structured output integration. Earlier
-   raw HTTP Groq feasibility tests do not prove the wrapper path works.
+2. Run checkpoint 04 tests on Windows, then the explicit single-request live
+   Supervisor check using a local Groq key. Build the other three focused agents
+   and tool-use path around provider adapters, grounding and ranking tests.
 3. Add provider adapters using current documentation and sanitized probe examples.
    Verify station lookup, return journeys, taxes, occupancy and source links.
 4. Connect persistence, retained-offer compatibility, locks and snapshots; test
