@@ -59,6 +59,7 @@ class Source(DomainModel):
     source_id: Name | None = None
     url: HttpUrl | None = None
     synthetic: bool = False
+    provider_data_at: AwareDatetime | None = None
 
 
 class PriceQuote(DomainModel):
@@ -68,6 +69,7 @@ class PriceQuote(DomainModel):
     basis: Literal["whole_stay", "whole_leg", "unverified"] = "unverified"
     covers_all_travelers: bool = False
     taxes_included: bool | None = None
+    notes: list[str] = Field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -144,3 +146,7 @@ class PlaceCandidate(DomainModel):
     # Monday=0. Missing weekday means unknown; an empty list means closed.
     weekly_hours: dict[int, list[tuple[str, str]]] = Field(default_factory=dict)
     source: Source
+    latitude: Annotated[float, Field(ge=-90, le=90)] | None = None
+    longitude: Annotated[float, Field(ge=-180, le=180)] | None = None
+    address: str | None = None
+    rating: Annotated[float, Field(ge=0, le=5)] | None = None

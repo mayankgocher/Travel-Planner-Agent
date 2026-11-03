@@ -1,22 +1,25 @@
 # Multi-agent travel planner
 
-Checkpoint 05 — four LLM roles and validated draft recommendations, 3 November 2026.
+Checkpoint 06 — real hotel/place retrieval adapters and bounded checks, 3 November 2026.
 
 **This is not yet a complete travel application.** The Supervisor, Transportation,
-Hotel and Itinerary LLM roles are connected through LangGraph. Retrieval uses
-explicitly synthetic fixture data; real provider adapters, UI, selection locks,
-numbered versions and export remain to be connected. There are 79 offline tests.
-Do not present fixture recommendations as live offers.
+Hotel and Itinerary LLM roles are connected through LangGraph. Their existing
+four-role check still uses explicitly synthetic fixture data. Separate real
+SerpApi hotel and Maps adapters are now implemented and tested offline; they
+are not wired into the graph yet. Flight/rail/weather adapters, UI, selection
+locks, numbered versions and export remain pending. There are 108 offline tests.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
 01 dependency installation and graph smoke check on Windows Python 3.12.7.
 Checkpoint 02's 20 tests also passed on Windows Python 3.12.7. The user reported
 the checkpoint 03 demo completed after the test-discovery fix. The corrected Supervisor passed its live check on the user's Windows machine
-(801 input + 360 output = 1,161 tokens). User verified the original checkpoint 05
-suite of 64 tests on Windows. Its live run stopped at Supervisor hotel_class
-normalization. The corrected revision has 79 passing tests on Linux Python
-3.12.14; revised Windows/live four-role verification remains pending.
+(801 input + 360 output = 1,161 tokens). The corrected checkpoint 05 passed all
+79 tests on Windows Python 3.12.7. Its four-role live check also passed: five
+Groq requests including one itinerary repair, 6,845 reported tokens, synthetic
+INR 20,100 subtotal and no unresolved validation errors. This does not establish
+live travel accuracy. Checkpoint 06 has 108 passing offline tests on Linux Python
+3.12.14; its Windows and real SerpApi checks remain pending.
 
 ## Read first
 
@@ -55,9 +58,9 @@ or Streamlit app launch command exists yet.
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.
 
-If you already installed checkpoint 04 successfully, keep the existing venv:
+If you already installed checkpoint 05 successfully, keep the existing venv:
 dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
-`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 05.
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 06.
 Tests use temporary fixture keys and do not load your real .env. No live API
 calls occur. The demo uses in-memory checkpoints only; a test separately verifies
 SQLite persistence across graph rebuilds. Demo results are not travel offers.
@@ -65,7 +68,7 @@ SQLite persistence across graph rebuilds. Demo results are not travel offers.
 ## Optional live Supervisor check
 
 After offline tests pass, add your Groq key locally to GROQ_API_KEY in .env.
-Keep GROQ_MODEL=openai/gpt-oss-120b. No other keys are needed yet. Run:
+Keep GROQ_MODEL=openai/gpt-oss-120b. This Supervisor check needs no other key. Run:
 
 ```powershell
 .\venv\Scripts\python.exe scripts\check_supervisor.py --live
@@ -109,6 +112,44 @@ usage. Unavailable usage is null/unknown, never inferred as zero consumption.
 The historical Supervisor schema integer/number overlap has been fixed and
 verified live. The original Supervisor-only check is retained for diagnosis and
 need not be rerun if already passed.
+
+## New: hotel and places retrieval check
+
+After offline tests pass, fill `SERPAPI_API_KEY` in your local `.env` using your
+existing SerpApi key. Keep all other keys as they are. Do not paste keys in chat.
+There are no dependency changes and no need to recreate your venv.
+
+```powershell
+.\venv\Scripts\python.exe scripts\check_providers.py
+.\venv\Scripts\python.exe scripts\check_providers.py --live --category all
+```
+
+The first command previews without keys or network calls. The second makes
+at most **two SerpApi requests**: one Jaipur hotel search and one Maps search.
+No Groq, flight, rail, weather, property-detail, pagination or booking requests.
+There are no automatic retries. An error on the first request stops the second.
+Rerunning `--live` makes fresh requests; it does not deduplicate earlier runs.
+You may run just `--category hotels` or `--category places` (one request each).
+
+Default stay: 14 days after execution, three nights, two adults, exactly 3 stars,
+INR 2,000–4,000 nightly and guest rating at least 4.2/5. A future `--check-in
+YYYY-MM-DD` overrides the default date. These are probe inputs, not saved user
+preferences. Provider rating code 8 requests 4+; Python applies the exact 4.2
+threshold. Currency defaults to INR for this adapter if absent; monetary user
+preferences still require explicit currency before complete app integration.
+
+Read `data/reports/providers_<unique run>/report.html`: input parameters,
+hotel/place tables, filter results, warnings, source IDs/links and timestamps.
+Only `report.json` and `report.html` are included in `share_results.zip`. Share
+that ZIP only. No keys, private reasoning or raw response payloads are saved.
+
+`PASS_CHECKS` means selected categories returned normalized results and at least
+one hotel passed the requested filters. It does not confirm room occupancy,
+private room type, tax completeness, seat availability or a complete trip price.
+`NO_HOTELS_MATCH_FILTERS` is a valid restrictive-search outcome, not proof the
+API failed. Empty/error results require review rather than invented replacements.
+No stay total is manufactured by multiplying a nightly average. These adapters
+keep unknown evidence explicit; the graph's synthetic fixtures are unchanged.
 
 Add keys locally only when live integration testing begins. Never paste them in
 chat, commit `.env`, or upload a project ZIP containing populated credentials.

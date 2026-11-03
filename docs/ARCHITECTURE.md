@@ -1,9 +1,9 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 05 connects four LLM roles using explicitly synthetic travel
-retrieval, validates draft schedules and calculates recommended-offer subtotals.
-The diagram remains the product blueprint: real providers, retained locks,
-version storage and UI are still pending. Current finalize returns a draft
+Status: Checkpoint 06 retains four LLM roles using explicitly synthetic graph
+retrieval and adds separate real hotel/Maps adapters with a bounded live checker.
+The diagram remains the product blueprint: provider-to-graph integration, other
+providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
 
 ## Responsibilities
@@ -132,7 +132,9 @@ schedule validation, specialist fixtures, tests/test_specialists.py and check_ag
 Intake accepts structured patches or natural language with a configured Supervisor.
 Clarification resumes accept a patch or natural-language reply. Its finalize node marks workflow completion or draft readiness; neither is a
 saved product version or booking.
-The provider/server/UI/version/export modules in this map remain planned. Lock compatibility with changed offers
+Checkpoint 06 implements providers/http.py and providers/serpapi.py for hotel and
+Maps retrieval, plus scripts/check_providers.py and tests/test_providers.py.
+Flight/rail/weather providers and server/UI/version/export modules remain planned. Lock compatibility with changed offers
 and graph enforcement remain pending; the primitive only detects replacement,
 removal and unlock attempts. No agent files are presented as working stubs.
 
@@ -145,7 +147,8 @@ removal and unlock attempts. No agent files are presented as working stubs.
 
 Separate tool selection and final structured-answer calls where required by the
 selected Groq model. Supervisor's wrapper path is now live-verified. All four
-roles also pass intercepted-HTTP tests; the four-role live run remains pending.
+roles also pass intercepted-HTTP tests. The user verified all four roles live on
+Windows using synthetic travel evidence: five calls including repair, 6,845 tokens.
 
 
 ## Checkpoint 05 implementation boundary
@@ -171,3 +174,26 @@ new model work; earlier completed per-role token usage is retained and failed
 unreported usage remains unknown. Current live check performs four LLM calls,
 with at most one extra itinerary correction. No tool-calling loop is implemented
 in the new specialists yet; Python owns retrieval order.
+
+## Checkpoint 06 retrieval boundary
+
+`SerpApiHttp` owns a fixed HTTPS endpoint, 30-second timeout, zero retries, no
+redirect following and a redacted attempted-request ledger. The adapter maps
+validated preferences to provider parameters; parsers return typed offers/places,
+warnings and response field names. They preserve source timestamps separately
+from local retrieval time. Provider defaults may use cached results.
+
+Hotel class and guest rating are separate filters. Unsupported 1-star API filtering
+is omitted rather than changed to 2 stars; Python applies the original constraint.
+Price bounds are widened to whole units for the API then checked exactly in Python.
+Explicit after-tax fields are recognized, but room occupancy/type are unverified;
+such prices cannot establish a complete payable subtotal. Search echo mismatches
+are rejected. Missing totals stay null. Place hours support search/detail shapes,
+closed days and multiple intervals; ambiguous hours remain unknown. Exact provider
+IDs are deduplicated; nearby aliases/geographic relevance still need review.
+
+The live checker bypasses the graph and LLM to isolate provider behavior: at most
+one hotel search plus one Maps search, stopping on an error. It saves readable
+HTML and JSON with matching input parameters. It never substitutes fixture data.
+Return/arrival-based hotel dates, geographic validation, optional weather and
+integration with agent retrieval callbacks remain next-stage work.

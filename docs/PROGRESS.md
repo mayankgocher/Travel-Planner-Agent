@@ -1,90 +1,97 @@
 # Progress and continuation
 
-Updated 3 November 2026 (India). Checkpoint 05: all four LLM roles.
+Updated 3 November 2026. Checkpoint 06: hotel and Maps provider adapters.
 
-## Completed and evidence
+## Verified through checkpoint 05
 
-- Windows target Python 3.12.7 dependency installation and graph smoke check
-  verified by user. Checkpoint 02's 20 domain tests passed on Windows.
-- Clarification/routing demo completed after fixing backup test discovery.
-- Supervisor native structured output verified live: all fixed preference checks
-  passed, 801 input/360 output/1,161 total tokens. Report reviewed in conversation.
-- Four LLM classes now participate in the graph: Supervisor, Transportation,
-  Hotel, Itinerary. Downstream searches remain explicit synthetic fixtures.
-- Python filters hard constraints before ranking. Unknown/repeated/missing IDs
-  are rejected. Ranked results retain a short model explanation.
-- Itinerary draft uses known place IDs and ranked transport/hotel recommendations;
-  Python checks dates, duration, buffers, overlaps, known hours and daily pace.
-  One correction call maximum; unresolved issues remain visible.
-- Draft subtotal derives from the referenced recommended offers, using Decimal
-  and complete scope/tax/currency checks. Over-budget drafts require review.
-- Model errors stop further model work. Token usage is tracked by role per turn.
-- 79 tests passed on Linux Python 3.12.14. Includes real ChatGroq HTTP intercepted
-  locally for all four roles, correction bounds, malformed rankings and subtotals.
-- No real Groq calls were made while building checkpoint 05. User Windows/live
-  verification of this checkpoint remains pending. Dependencies unchanged.
+- User verified dependency installation on Windows Python 3.12.7 and graph smoke
+  execution. Backup test discovery was fixed by pytest.ini.
+- Supervisor live structured extraction passed with 1,161 tokens. Groq integer/
+  number schema overlap and strict whole-number normalization were fixed.
+- Four roles are connected through LangGraph: Supervisor, Transportation, Hotel,
+  Itinerary. Current graph retrieval uses explicitly synthetic fixtures.
+- User verified 79 offline tests and the four-role live synthetic check on Windows:
+  PASS_CHECKS, five Groq calls including one itinerary repair, 6,845 total tokens.
+  Reviewed report: agents_20261103_164619_957128_4b9fa4.json.
+- Per-role totals: Supervisor 1,089; transport 944; hotel 928; itinerary 3,884.
+  Synthetic recommendations cost INR 20,100 against INR 25,000, with no remaining
+  timing errors. This is one successful scenario, not an accuracy score.
+- Ranking IDs, hard filters, schedule bounds/buffers/hours and Decimal subtotals
+  are validated in Python. Model failures stop further model work. Missing usage
+  stays unknown, and available rejected-call usage is retained.
+- One transport explanation described 3A as requested despite train_class=null.
+  Checkpoint 06 tightens that prompt; semantic quality still requires review.
 
-- User subsequently verified the original 64-case suite on Windows. A live run
-  stopped at hotel_class whole-number validation before the other three roles.
-  The original handler discarded the rejected parsed value and response usage,
-  so the reported zero did not establish zero token consumption. This revision
-  normalizes numeric strings and explicit N-star labels, rejects fractional or
-  ambiguous values, and retains parsed Supervisor decisions and known usage on
-  rejection. Parser/truncation failures retain available usage too. Missing usage
-  is now null/unknown. Report-level regression tests cover both known and unknown
-  usage. Next action: verify 79 tests on Windows and run the live check once.
+## Implemented in checkpoint 06
 
-## Still pending — included in scope
+- Fixed-host SerpApi HTTP client: 30-second timeout, zero retries/redirects,
+  redacted request audit, safe provider errors, accepted response size limit.
+- Hotel search maps date/adults/currency, nightly bounds, exact/at-least stars and
+  rating buckets. Python retains exact thresholds. Typed normalization preserves
+  missing totals, tax evidence, timestamps and source links. Occupancy/room type
+  remain unverified because the source fields do not establish them.
+- Maps search normalizes place IDs, address, coordinates, rating and weekday
+  hours from search/detail shapes. Ambiguous hours remain unknown. Exact IDs
+  deduplicate; nearby aliases and geographic relevance still need review.
+- scripts/check_providers.py previews without keys or calls. Explicit --live
+  --category all enables at most two SerpApi requests, one hotel and one Maps,
+  stopping on an error. It makes no LLM/flight/rail/weather/booking requests.
+- Unique HTML/JSON reports pair query parameters with results and limitations;
+  a share ZIP is created once after report writes finish. Keys and raw provider
+  responses are excluded. Rerunning live spends fresh requests; no dedup ledger.
+- 108 offline tests passed on Linux Python 3.12.14. Tests intercept HTTP, block
+  sockets and verify normalization, hard filters, errors, bounds and reporting.
+  Dependencies unchanged. No real API calls were made in this build environment.
+- Existing sanitized response replay also passed offline: H02 normalized 18 hotels
+  (all occupancy-unverified); M01 normalized 20 places, all with parsed hours.
+  check_environment.py passed imports/conditional graph execution, and provider
+  preview confirmed zero calls. No fresh live retrieval was attempted here.
+- Checkpoint 06 Windows tests and real SerpApi execution remain pending.
 
-- SerpApi/RailRadar/Open-Meteo adapters and actual place/weather retrieval.
-- LangChain tool wrappers/tool-use integration with real provider adapters;
-  current retrieval callbacks run in Python's fixed order.
-- Selection controls and retained-lock compatibility against new requests.
-- Durable application trip lifecycle, numbered view-only plan snapshots,
-  stale-version protection and failed-replan preservation.
-- FastAPI, Streamlit, final Supervisor explanation and Markdown export.
-- Systematic representative evaluation and full live user journeys.
+## Next actions
 
-Graph checkpoints support clarification but are not product plan versions.
-Synthetic evidence must never replace a failed live provider response.
+1. Install checkpoint 06, preserving .env/venv, and run 108 tests on Windows.
+2. User fills SERPAPI_API_KEY locally. Run check_providers.py --live --category all
+   once and review its share_results.zip. Do not rerun the already-passed Groq
+   check for this step. Empty/filtered results do not automatically mean API failure.
+3. Implement flight and RailRadar adapters with bounded checks: resolve airports/
+   stations, normalize separate outbound/return legs, preserve price scope, follow
+   station lookup -> Trains Between -> shortlist -> fares -> optional timetable.
+   Fare docs routing needs rechecking; do not infer endpoint removal from a redirect.
+   Seat availability remains unverified. No PNR/live-status endpoints in scope.
+4. Connect real providers to agent retrieval callbacks/tool definitions. Derive
+   hotel stay dates from actual arrival/departure, including overnight journeys.
+   Add geographic validation and destination timezone handling. Keep fixtures in
+   separate checks; never fall back to them after a live provider failure.
+5. Add optional near-term Open-Meteo daily weather. Keep out-of-horizon weather
+   unavailable and unknown opening hours visible. No navigation service promised.
+6. Add selection/lock compatibility, serialized trip updates, numbered view-only
+   snapshots, stale-version rejection and last-successful-plan preservation.
+7. Add thin FastAPI, Streamlit, final Supervisor explanation and Markdown download.
+   Finish representative evaluations, live journeys and owner learning guide.
 
-## Next steps
+## Still pending in agreed scope
 
-1. Run checkpoint 05 offline tests on Windows. Run scripts/check_agents.py --live
-   explicitly once with the local Groq key; four calls, up to five with repair.
-2. Implement actual HTTP adapters, source normalization and tool wrappers. Verify
-   station lookup, endpoint order, return flights, occupancy/tax basis and links.
-   Derive hotel stay coverage from real arrival/departure dates, especially for
-   overnight journeys; fixture schedules are same-day only. Resolve destination
-   timezone rather than assuming India for international routes.
-3. Feed actual Places/hours and optional daily weather. Preserve unknown or
-   overnight hours as unverified until normalized. Estimate transfer buffers
-   honestly; no navigation route-time service has been implemented.
-4. Add selection/locks, compatibility checks, version repository and atomic
-   update behavior before connecting user edit controls.
-5. Add thin FastAPI, Streamlit, final explanation and Markdown download. Finish
-   evaluations and a bounded live walkthrough; update owner learning guide.
+Flight/rail/weather adapters, graph live retrieval, LangChain tool-use integration,
+user selection controls/locks, durable application lifecycle, plan snapshots,
+FastAPI, Streamlit, export and systematic evaluation. Graph checkpoints are not
+product versions. No full application readiness claim is supported yet.
 
-## Preserve these decisions
+## Preserve decisions
 
-Four agents; one destination; LangGraph/LangChain, Groq, FastAPI, Streamlit;
-Python 3.12.7. Root D:\Projects\GenAI\Agentic AI\Travel Planning Agent.
-No booking/payment automation, separate search cache, vector database or RAG.
-Current trip results stay in graph state. Costs focus on intercity transport and
-hotel; food, local transport and attractions excluded. No extra attraction fee
-research. Selective replanning, locks, simple repair, versions and export remain
-in scope. Groq paid upgrade chosen but actual activation/limits not confirmed;
-independent SerpApi/RailRadar quotas still apply. No old daily caps/fixed waits.
+Four agents; one destination; Python 3.12.7; LangGraph/LangChain, Groq, FastAPI,
+Streamlit. Windows root: D:\Projects\GenAI\Agentic AI\Travel Planning Agent.
+No automated booking/payment, separate search cache, vector database or RAG.
+Current trip results stay in graph state. Core subtotal is intercity transport
+plus hotels, excluding food/local transport/attractions. No extra attraction fee
+research. Selective replanning, minimal repair, locks, versions and download stay
+in scope. Groq pay-as-you-go chosen, activation/actual limits unverified; provider
+quotas remain independent. No old five-request/day cap or fixed 65-second pacing.
 
-## Known resolved implementation issues
+Keep keys server-side. Unknown price is null, not zero. Missing occupancy/taxes/
+currency prevent complete affordability claims. Monetary preferences without an
+explicit currency still need clarification before full app integration. Search
+links are not payment guarantees. Keep source/fetch timestamps and warnings.
 
-Installer backups were initially collected as tests; pytest.ini now scopes tests/
-and excludes backup_*/. Effective GROQ_MODEL can be overridden by the process
-environment. HTTP-400 diagnostics retain only redacted message/code/param/type.
-Groq rejected integer/number overlap in the Supervisor schema; one numeric branch
-plus strict whole-number normalization fixed it, with a regression test and a
-successful live response. Do not reintroduce the overlap in future schemas.
-
-Read AGENTS.md, architecture, API findings and walkthrough before continuing.
-Run tests before extending. Never request keys in chat. A passing synthetic
-four-role check is not proof of live travel accuracy or full application readiness.
+Read AGENTS.md, README, architecture, API findings and walkthrough before edits.
+Run offline tests before extending. Preserve the user's environment and backups.

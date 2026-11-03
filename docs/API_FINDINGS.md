@@ -1,7 +1,8 @@
 # API evidence and integration boundaries
 
 These findings summarize the earlier probe runs reviewed in this conversation.
-The application itself has not integrated these APIs yet. Keys and raw private
+The application now has separate hotel/Maps adapters; graph retrieval still uses
+synthetic data. Keys and raw private
 responses are excluded. Evidence is feasibility testing, not a reliability SLA.
 
 | Service | Reviewed observations | Application rule |
@@ -61,9 +62,8 @@ these historical numbers. SerpApi and RailRadar allowances remain independent.
 
 ## Still to verify
 
-- ChatGroq structured output: checkpoint 04 verifies the actual wrapper HTTP
-  payload with intercepted requests. Live Supervisor verification and the
-  specialist tool-use path remain pending.
+- ChatGroq structured output: all four role paths passed a live synthetic check;
+  specialist tool-use integration remains pending.
 - Station autocomplete, ambiguous city/station handling and application adapters.
 - Requested return journeys: normalize outbound and return offers separately.
 - Real occupancy/room completeness, taxes and booking/source link rendering.
@@ -82,8 +82,35 @@ adapter contract before claiming support.
 
 The corrected Supervisor wrapper passed a live request with all fixed preference
 checks true, using 1,161 reported tokens. All four role implementations now pass
-intercepted-HTTP integration tests (part of 64 offline tests). The live four-role
-check still uses synthetic travel evidence and is pending user verification.
-Actual SerpApi/RailRadar/weather adapters and LangChain tool-use integration are
-not implemented in this checkpoint; earlier endpoint probes remain supporting
-evidence, not proof of those future adapters. Seat availability stays unverified.
+intercepted-HTTP integration tests. The user verified the corrected 79-test suite
+and a live four-role synthetic check: 6,845 tokens across five calls, one itinerary
+repair, INR 20,100 synthetic subtotal, no remaining schedule errors. This is one
+successful scenario, not an accuracy score. Seat availability stays unverified.
+
+## Checkpoint 06 contracts
+
+Hotel and Maps adapters now pass intercepted-HTTP tests; full suite 108 tests.
+No real provider calls were made in this build environment. Windows execution and
+the new real hotel/Maps check are pending user verification. Flight/RailRadar/
+weather adapters and LangChain tool-use integration remain pending.
+
+Current hotel documentation was checked during implementation:
+https://serpapi.com/google-hotels-api and https://serpapi.com/google-hotels-properties .
+Rating 7 means 3.5+, 8 means 4+, 9 means 4.5+. A user threshold such as 4.2 uses
+the broader provider bucket plus an exact Python filter. Hotel class accepts
+2/3/4/5 and comma-separated choices; 1 star needs local filtering. Min/max bounds
+are nightly-display filters. Prefer explicit extracted_after_taxes_fees when
+present; extracted_lowest/display price alone does not establish included taxes.
+
+Saved hotel probe fields did not establish room occupancy or room type. The adapter
+therefore keeps covers_all_travelers=false and room_type=null even when the search
+requested two adults. Exact requested date/currency/adult echoes confirm search
+scope, not room capacity or a guaranteed payable amount. A missing total_rate
+stays unknown; multiplying an average would overstate the evidence. This means
+real hotel quotes currently keep complete trip affordability unknown.
+
+Maps search/detail hour formats are normalized separately. Admission fees are
+not fetched; malformed or ambiguous hours stay unknown. Exact IDs deduplicate
+identical records, but alternate IDs for nearby aliases are not yet merged.
+The two-call checker saves only normalized data and field names, with request
+inputs, source/fetch timestamps and warnings; no raw provider bodies or secrets.

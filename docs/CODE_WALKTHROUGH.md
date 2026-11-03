@@ -1,8 +1,9 @@
-# Checkpoint 05 walkthrough
+# Checkpoint 06 walkthrough
 
 Four LLM roles, graph orchestration and draft schedule/cost checks are implemented
-using synthetic retrieval. Real provider adapters, user selections/locks, plan
-versions and UI remain pending. Earlier sections describe foundation modules;
+using synthetic graph retrieval. Separate real hotel/Maps adapters are implemented;
+graph wiring, other providers, user selections/locks, plan versions and UI remain
+pending. Earlier sections describe foundation modules;
 the checkpoint 05 section below describes the current specialist path.
 
 ## Read in order
@@ -18,7 +19,7 @@ the checkpoint 05 section below describes the current specialist path.
 TripPreferences with Delhi, Jaipur and two adults leaves dates, budget, class and
 currency unknown. missing_required() identifies dates for future clarification.
 Pydantic rejects reversed dates, negative prices, invalid ratings, empty cities
-and unexpected fields. Natural-language extraction is not implemented yet.
+and unexpected fields. Natural-language extraction now lives in agents/supervisor.py.
 
 Source requires an aware timestamp. Optional URLs must be HTTP(S); that does not
 prove a URL is a valid booking link. synthetic=True distinguishes fixtures.
@@ -56,7 +57,8 @@ Settings() explicitly loads the project's .env; imports do not. Environment
 variables take precedence. Keys use SecretStr, are excluded from repr and dumps,
 and are only required at an explicitly requested live boundary. Do not log
 complete settings/errors in future handlers: this is not a universal scrubber.
-Relative data_dir resolves from project root. No provider client exists yet.
+Relative data_dir resolves from project root. Provider clients are created only
+at explicitly invoked live boundaries, never automatically during imports.
 
 Run `venv\Scripts\python.exe -m pytest -q` from the Windows project root.
 Tests disable socket connections and use temporary fixture keys, not real .env.
@@ -219,3 +221,41 @@ patch. invoke_structured() extracts usage before parser/finish checks, so even
 a rejected/truncated response can report known consumption. Specialist failure
 usage adds only the failed call's available counters to earlier successful calls.
 The live report uses null when no counter is available, not a misleading zero.
+
+## Checkpoint 06: follow one real search
+
+1. `scripts/check_providers.py` previews by default. Only `--live` loads the
+   local SerpApi key and creates the HTTP client. It builds explicit Jaipur test
+   preferences; these are not a Supervisor decision or saved user trip.
+2. `backend/providers/serpapi.py`, `SerpApiAdapter.hotels()` maps dates, adults,
+   currency, nightly bounds, star class and guest-rating bucket. One HTTP request
+   returns one page. `places()` makes one Maps query from destination/interests.
+3. `backend/providers/http.py` makes a fixed-host request with timeout and no
+   retry/redirect. Its public audit excludes the API key. Network exceptions are
+   recorded by type, not by their URL-bearing text. Quota/auth/provider errors
+   stop the check before another category is attempted.
+4. `parse_hotels()` constructs HotelOffer objects; explicit search echo mismatches
+   reject the response. Missing totals stay null, unknown taxes stay unknown and
+   occupancy remains unverified. `eligible_hotels()` applies exact user thresholds
+   after the broader provider filters. A passing listing filter is not verified
+   room capacity or final affordability.
+5. `parse_places()` keeps coordinates, address, rating and known weekday hours.
+   It handles the different search/detail hour shapes. Missing/ambiguous hours
+   are unknown; closed weekdays are empty lists. Exact duplicate IDs are removed;
+   nearby aliases and relevance still need review. No admission fee is researched.
+6. The checker saves request inputs, normalized records and warnings after each
+   case, then creates the share ZIP once. HTML tables summarize results; expandable
+   records retain source IDs, URLs and fetch/provider timestamps. No raw responses
+   or keys are saved. Unexpected local errors report their type without exception
+   text. A hard process kill may leave a REQUESTING case; do not infer completion.
+
+The adapter modules do not import fixtures. They are deliberately checked before
+connecting to the four-role graph. `check_agents.py` still uses synthetic travel
+data, so there is no mixed real/synthetic travel workflow. No Groq request occurs
+in `check_providers.py`. This checkpoint adds two provider modules and one check
+script rather than new agents or endpoint-specific graph nodes.
+
+`tests/test_providers.py` intercepts actual httpx requests with MockTransport and
+blocks real sockets. Tests cover parameter mapping, scope mismatches, taxes,
+missing prices, hours, duplicates, errors, one/two-request limits and safe report
+sharing. The entire suite has 108 tests; Windows/live retrieval is the next check.
