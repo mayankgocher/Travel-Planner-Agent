@@ -90,11 +90,22 @@ def test_update_preserves_omitted_preferences_and_field_enum_is_complete():
     assert set(get_args(PreferenceField)) == set(TripPreferences.model_fields)
 
 
-@pytest.mark.parametrize("field,value", [("adults", 2.0), ("hotel_class", 3.0), ("flight_sort_by", 2.0)])
-def test_integral_numeric_updates_become_strict_domain_integers(field, value):
+@pytest.mark.parametrize("field,value,expected", [
+    ("adults", 2.0, 2), ("hotel_class", 3.0, 3), ("flight_sort_by", 2.0, 2),
+    ("hotel_class", "3", 3), ("hotel_class", "3.0", 3), ("hotel_class", "3-star", 3),
+    ("hotel_class", "3 stars", 3), ("adults", "2", 2), ("adults", "2.0", 2), ("flight_sort_by", "2", 2),
+])
+def test_integral_numeric_updates_become_strict_domain_integers(field, value, expected):
     d = SupervisorDecision.model_validate(decision([update(field, value)]))
     patch = validated_patch(d, TripPreferences())
-    assert patch[field] == int(value) and type(patch[field]) is int
+    assert patch[field] == expected and type(patch[field]) is int
+
+
+@pytest.mark.parametrize("value", ["3.5", "3-4", "three", "at least 3", "1e100"])
+def test_ambiguous_or_fractional_hotel_class_is_not_guessed(value):
+    d = SupervisorDecision.model_validate(decision([update("hotel_class", value)]))
+    with pytest.raises(ModelCallError):
+        validated_patch(d, TripPreferences())
 
 
 @pytest.mark.parametrize("field", ["adults", "hotel_class", "flight_sort_by"])
@@ -131,6 +142,23 @@ def test_bad_responses_fail_safely_without_automatic_retry(payload, status, fini
     assert "fixture-secret" not in str(caught.value)
     assert "fixture-secret" not in str(caught.value.provider_error)
     assert len(requests) == 1
+    if status == 200:
+        assert caught.value.model_usage["total_tokens"] == 180
+
+
+def test_rejected_supervisor_decision_retains_usage_and_bad_value_in_graph():
+    payload = complete_decision()
+    payload["updates"].append(update("hotel_class", "3-4"))
+    requests = []; supervisor, client = mock_supervisor(payload, requests)
+    with client:
+        graph = build_workflow(demo_workers.transport, demo_workers.hotels, demo_workers.itinerary,
+                               InMemorySaver(), supervisor)
+        result = graph.invoke({"user_message": "Use exactly three-star hotels."},
+                              {"configurable": {"thread_id": "rejected-slot"}})
+    assert result["status"] == "supervisor_error" and len(requests) == 1
+    assert result["model_usage"]["total_tokens"] == 180
+    assert result["supervisor_decision"]["updates"][-1]["value"] == "3-4"
+    assert "preferences" not in result
 
 
 def test_message_only_intent_cannot_mutate_preferences():
@@ -243,3 +271,22 @@ def test_http_400_reason_survives_graph_and_report_without_secrets(tmp_path, mon
     assert report["supervisor_http_status"] == 400
     assert report["supervisor_error_detail"]["code"] == "invalid_schema"
     assert "fixture-secret" not in str(report) and "private output" not in str(report)
+
+
+@pytest.mark.parametrize("status,expected_total", [(200, 180), (400, None)])
+def test_four_agent_report_preserves_rejected_reply_usage_or_unknown(tmp_path, monkeypatch, status, expected_total):
+    from scripts import check_agents as check
+    payload = complete_decision()
+    payload["updates"].append(update("hotel_class", "3-4"))
+    requests = []; supervisor, client = mock_supervisor(payload, requests, status=status)
+    monkeypatch.setattr(check, "Settings", lambda: Settings(_env_file=None, data_dir=tmp_path))
+    monkeypatch.setattr(check, "create_model", lambda settings: supervisor.model)
+    monkeypatch.setattr(check.sys, "argv", ["check_agents.py", "--live"])
+    with client:
+        assert check.main() == 2
+    report = json.loads(next((tmp_path / "reports").glob("*.json")).read_text())
+    assert report["reported_total_tokens"] == expected_total and len(requests) == 1
+    assert report["agent_usage"] == {}
+    if status == 200:
+        assert report["supervisor_decision"]["updates"][-1]["value"] == "3-4"
+    assert "fixture-secret" not in str(report)

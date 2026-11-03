@@ -23,3 +23,7 @@ class TripState(TypedDict, total=False):
     warnings: list[str]
     trace: list[str]
     status: str
+    places: list[dict[str, Any]]
+    agent_usage: dict[str, dict[str, int]]
+    model_failed: bool
+    specialist_error: dict[str, Any] | None

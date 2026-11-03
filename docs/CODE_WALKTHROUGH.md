@@ -1,8 +1,9 @@
-# Checkpoint 04 walkthrough
+# Checkpoint 05 walkthrough
 
-The domain foundation, graph orchestration and optional Groq Supervisor intake
-are implemented. The other three LLM agents, provider clients, offer selection,
-plan validation and UI are not implemented yet.
+Four LLM roles, graph orchestration and draft schedule/cost checks are implemented
+using synthetic retrieval. Real provider adapters, user selections/locks, plan
+versions and UI remain pending. Earlier sections describe foundation modules;
+the checkpoint 05 section below describes the current specialist path.
 
 ## Read in order
 
@@ -166,3 +167,55 @@ int for adults, hotel_class and flight_sort_by; fractional values, booleans and
 nonfinite numbers are rejected. The integer constraints in TripPreferences
 remain strict. A regression test walks the actual outgoing wrapper schema to
 catch the overlap before future live requests.
+
+
+## Checkpoint 05: follow the four-role path
+
+Start at scripts/check_agents.py, which constructs ChatGroq and the four classes
+then injects them into build_workflow(). Supervisor extracts preferences. The
+conditional router then runs TransportationAgent, HotelAgent and ItineraryAgent
+only when needed. Sources in specialist_fixtures.py are all synthetic; no real
+flight/train/hotel/place API is contacted by this script.
+
+TransportationAgent receives search results, applies eligible_transport(), and
+asks the model to rank all eligible IDs with a short explanation. Train/flight
+mode and class, route/date, traveler count and explicit flight cap are enforced
+in Python. HotelAgent similarly filters dates, occupancy, class/rating and known
+nightly prices. Unknown values cannot satisfy explicit hard filters. apply_ranking()
+rejects foreign/duplicate/omitted IDs; no LLM text becomes a fabricated offer.
+
+ItineraryAgent uses the first ranked valid option in each leg and first hotel as
+proposed recommendations. It keeps their IDs in the draft. It receives only known
+place candidates; Schedule contains IDs and local date/time strings. Python
+validates actual timestamps against trip boundaries, known hours, 60-minute
+arrival/departure buffers and 30-minute estimated transfers. Missing hours warn;
+known closed days reject. Overnight hour normalization and verified route travel
+times are not implemented. At most one repair call receives the exact errors.
+
+The graph finalize node re-looks-up the recommended IDs and calls summarize_costs().
+The model never supplies the numeric subtotal. Over-budget schedules require
+review; incomplete price basis remains unknown. A synthetic complete quote can
+produce a synthetic verified subtotal; it says nothing about a real payable fare.
+All model ranking reasons and schedule notes still need semantic quality review.
+
+Usage is recorded separately for Supervisor and the three specialists. Itinerary
+usage includes a correction if one occurred. Counts reset per new turn, so an
+explanation-only reply does not charge old specialist usage again. An invalid
+ranking or model/provider error stops further model work and returns partial data.
+
+No locks or numbered product versions are applied yet. The older lock primitive
+is not the full user-facing feature. Read docs/PROGRESS.md for exact remaining work.
+
+Numeric-input correction: the update value schema is generic, so a model can
+return a string for a numeric field. validated_patch() now accepts exact numeric
+strings ("3", "3.0") and explicit hotel labels ("3-star", "3 stars"), then checks
+integrality and domain bounds. It never rounds/truncates fractions or interprets
+ambiguous ranges. The original rejected value in the live report was not saved;
+these are covered valid-representation cases, not a reconstruction of that reply.
+
+Supervisor validation failures now attach the parsed decision and token usage
+to ModelCallError. The graph retains this diagnostic data without applying the
+patch. invoke_structured() extracts usage before parser/finish checks, so even
+a rejected/truncated response can report known consumption. Specialist failure
+usage adds only the failed call's available counters to earlier successful calls.
+The live report uses null when no counter is available, not a misleading zero.

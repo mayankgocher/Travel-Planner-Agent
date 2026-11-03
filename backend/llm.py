@@ -16,6 +16,8 @@ class ModelCallError(RuntimeError):
     """Safe public error; never carries provider response bodies or credentials."""
     http_status: int | None = None
     provider_error: dict[str, str] | None = None
+    model_usage: dict[str, int] | None = None
+    parsed_decision: dict | None = None
 
 
 def safe_provider_error(body, secret: str) -> dict[str, str]:
@@ -64,23 +66,25 @@ def invoke_structured(model: ChatGroq, schema: type[BaseModel], messages: list) 
     We retain parsed business data and usage, never the raw/private reasoning.
     Semantic truthfulness still needs evaluation even when the schema is valid.
     """
+    usage = {}
     try:
         # Keep optional hosted tracing off for this initial integration.
         with tracing_context(enabled=False):
             result = model.with_structured_output(schema, method="json_schema", strict=True,
                                                   include_raw=True).invoke(messages)
         raw, parsed = result["raw"], result["parsed"]
+        usage = {k: v for k, v in (raw.usage_metadata or {}).items()
+                 if k in ("input_tokens", "output_tokens", "total_tokens")
+                 and type(v) is int and v >= 0}
         if result.get("parsing_error") is not None or parsed is None:
             raise ValueError("Invalid structured answer")
         if raw.response_metadata.get("finish_reason") != "stop":
             raise ValueError("Incomplete model answer")
-        usage = {k: v for k, v in (raw.usage_metadata or {}).items()
-                 if k in ("input_tokens", "output_tokens", "total_tokens")
-                 and type(v) is int and v >= 0}
         return StructuredResult(parsed=schema.model_validate(parsed), usage=usage)
     except (APIError, OutputParserException, ValidationError, ValueError, KeyError, TypeError) as exc:
         error = ModelCallError(f"Model call failed ({type(exc).__name__}); no preferences were applied.")
         error.http_status = getattr(exc, "status_code", None)
+        error.model_usage = usage or None
         key = model.groq_api_key.get_secret_value() if model.groq_api_key else ""
         error.provider_error = safe_provider_error(getattr(exc, "body", None), key)
         raise error from None

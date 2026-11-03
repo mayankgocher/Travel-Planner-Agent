@@ -1,9 +1,10 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 04 adds optional LangChain/Groq Supervisor intake before the
-structured validation/clarification/routing from checkpoint 03. The diagram
-below remains the product blueprint: the other three LLM specialists,
-selection, plan validation/repair and snapshot finalization are not connected yet.
+Status: Checkpoint 05 connects four LLM roles using explicitly synthetic travel
+retrieval, validates draft schedules and calculates recommended-offer subtotals.
+The diagram remains the product blueprint: real providers, retained locks,
+version storage and UI are still pending. Current finalize returns a draft
+recommendation, not a reservation or completed product plan version.
 
 ## Responsibilities
 
@@ -126,10 +127,12 @@ backend/services/costs.py, backend/services/replanning.py and tests/test_domain.
 Checkpoint 03 adds backend/graph/state.py and builder.py, synthetic demo workers,
 scripts/demo_workflow.py and tests/test_workflow.py. Checkpoint 04 adds backend/llm.py,
 backend/agents/supervisor.py, tests/test_supervisor.py and scripts/check_supervisor.py.
+Checkpoint 05 adds the other three agent classes, ranking/offer filters,
+schedule validation, specialist fixtures, tests/test_specialists.py and check_agents.py.
 Intake accepts structured patches or natural language with a configured Supervisor.
-Clarification resumes accept a patch or natural-language reply. Its finalize node marks
-workflow completion, not a validated travel plan or saved product version.
-The remaining module map is planned. Lock compatibility with changed offers
+Clarification resumes accept a patch or natural-language reply. Its finalize node marks workflow completion or draft readiness; neither is a
+saved product version or booking.
+The provider/server/UI/version/export modules in this map remain planned. Lock compatibility with changed offers
 and graph enforcement remain pending; the primitive only detects replacement,
 removal and unlock attempts. No agent files are presented as working stubs.
 
@@ -141,5 +144,30 @@ removal and unlock attempts. No agent files are presented as working stubs.
 - https://console.groq.com/docs/structured-outputs
 
 Separate tool selection and final structured-answer calls where required by the
-selected Groq model. The Supervisor wrapper path is tested with intercepted HTTP;
-the earlier successful Groq tests used raw HTTP, not this framework integration.
+selected Groq model. Supervisor's wrapper path is now live-verified. All four
+roles also pass intercepted-HTTP tests; the four-role live run remains pending.
+
+
+## Checkpoint 05 implementation boundary
+
+TransportationAgent and HotelAgent call injected search functions, then apply
+Python hard filters and request a native structured ranking. Python verifies
+that every eligible ID appears exactly once. ItineraryAgent uses the first ranked
+candidate per transport leg and first ranked hotel as proposed recommendations;
+these are not user-locked selections. It retrieves normalized place candidates
+and schedules supplied IDs. Known hours, estimated transfer gaps, arrival/return
+buffers and pace are checked in services/scheduling.py. One correction is allowed.
+
+Finalization looks up recommended IDs in the actual normalized offers before
+summing their complete quotes. No selected/recommended ID means no verified
+component cost. Over-budget or invalid schedules require review. Unknown taxes,
+traveler scope, prices or currency produce unknown totals. Existing zero-call
+routing demos still use legacy workers and keep unknown subtotals.
+
+Graph node worker interfaces remain ordinary callables. Four real LLM roles are
+injected by scripts/check_agents.py; zero-call demos inject demo_workers instead.
+The fixture module never serves as a live-provider fallback. Model errors stop
+new model work; earlier completed per-role token usage is retained and failed
+unreported usage remains unknown. Current live check performs four LLM calls,
+with at most one extra itinerary correction. No tool-calling loop is implemented
+in the new specialists yet; Python owns retrieval order.

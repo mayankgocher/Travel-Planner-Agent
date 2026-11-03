@@ -89,6 +89,7 @@ class HotelOffer(DomainModel):
     nightly_price: Money | None = None
     price: PriceQuote
     source: Source
+    recommendation_reason: str | None = None
 
     @model_validator(mode="after")
     def valid_stay(self):
@@ -111,6 +112,7 @@ class TransportOffer(DomainModel):
     price: PriceQuote
     seat_availability: Literal["unverified"] = "unverified"
     source: Source
+    recommendation_reason: str | None = None
 
     @model_validator(mode="after")
     def valid_journey(self):
@@ -134,3 +136,11 @@ class CostSummary(DomainModel):
     missing_or_unverified: list[Component]
     budget_status: Literal["unknown", "within_budget", "over_budget", "not_specified"]
     excluded_costs: list[str] = Field(default_factory=lambda: ["attractions", "food", "local_transport"])
+
+
+class PlaceCandidate(DomainModel):
+    id: Name
+    name: Name
+    # Monday=0. Missing weekday means unknown; an empty list means closed.
+    weekly_hours: dict[int, list[tuple[str, str]]] = Field(default_factory=dict)
+    source: Source

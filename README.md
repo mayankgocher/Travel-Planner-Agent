@@ -1,22 +1,22 @@
 # Multi-agent travel planner
 
-Checkpoint 04 — LangChain/Groq Supervisor intake, 3 November 2026.
+Checkpoint 05 — four LLM roles and validated draft recommendations, 3 November 2026.
 
-**This checkpoint is not yet a working travel application.** It contains the
-agreed design, environment templates, dependency pins, an offline environment
-check, validated domain models, configuration, cost/lock/replanning rules and
-55 offline tests, real LangGraph orchestration, and an optional Groq Supervisor
-that interprets natural-language requests. The three downstream workers remain
-synthetic; their live LLM agents, provider adapters, API routes and frontend
-follow later. Do not present those planned features as completed.
+**This is not yet a complete travel application.** The Supervisor, Transportation,
+Hotel and Itinerary LLM roles are connected through LangGraph. Retrieval uses
+explicitly synthetic fixture data; real provider adapters, UI, selection locks,
+numbered versions and export remain to be connected. There are 79 offline tests.
+Do not present fixture recommendations as live offers.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
 01 dependency installation and graph smoke check on Windows Python 3.12.7.
 Checkpoint 02's 20 tests also passed on Windows Python 3.12.7. The user reported
-the checkpoint 03 demo completed after the test-discovery fix. Checkpoint 04's
-55 tests passed on Linux Python 3.12.14; its Windows and live Groq checks remain
-pending.
+the checkpoint 03 demo completed after the test-discovery fix. The corrected Supervisor passed its live check on the user's Windows machine
+(801 input + 360 output = 1,161 tokens). User verified the original checkpoint 05
+suite of 64 tests on Windows. Its live run stopped at Supervisor hotel_class
+normalization. The corrected revision has 79 passing tests on Linux Python
+3.12.14; revised Windows/live four-role verification remains pending.
 
 ## Read first
 
@@ -55,9 +55,9 @@ or Streamlit app launch command exists yet.
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.
 
-If you already installed checkpoint 03 successfully, keep the existing venv:
+If you already installed checkpoint 04 successfully, keep the existing venv:
 dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
-`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 04.
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 05.
 Tests use temporary fixture keys and do not load your real .env. No live API
 calls occur. The demo uses in-memory checkpoints only; a test separately verifies
 SQLite persistence across graph rebuilds. Demo results are not travel offers.
@@ -79,17 +79,36 @@ not keys/raw responses/private reasoning. Share that JSON only. Missing usage
 after failure is unknown consumption; do not repeat failures blindly. Without
 --live, the script is a zero-request preview and loads no key.
 
-Diagnostic revision: the initial live run used an overridden model name; a later
-run with the correct model received HTTP 400. The exact rejection reason was not
-saved by the original handler. The revised handler retains only sanitized error
-message/code/param/type, excluding failed generations and raw request data. It
-reports provider rejections separately from preference-check failures. This is
-a diagnostic fix. A subsequent live report identified the cause: the updates
-value union contained both integer and number. The corrected schema uses number
-only for numeric values; Python requires whole numbers for adults, hotel class
-and flight sort codes. Fractional integer fields are rejected, never truncated.
-A regression test inspects the actual outgoing schema. Live verification of
-this corrected request remains pending.
+## Live four-role check
+
+After offline tests pass, with GROQ_API_KEY set locally and the effective model
+openai/gpt-oss-120b, run:
+
+```powershell
+.\venv\Scripts\python.exe scripts\check_agents.py --live
+```
+
+Four Groq calls normally occur: Supervisor, transport ranking, hotel ranking,
+itinerary scheduling. At most one extra scheduling call can correct conflicts.
+A model/parse/grounding error stops subsequent model work. Zero automatic HTTP
+retries. The graph may make fewer calls for missing details or empty results.
+
+All flight/train/hotel/place evidence is synthetic. No travel API is contacted.
+This validates the LLM integration, not live price/availability accuracy. Review
+ranking reasons and notes as well as automated checks. The unique JSON report
+under data/reports/ includes per-role usage, recommendations, validation and
+cost checks. Share only that JSON. Unknown failed-call usage is not counted as
+known consumption. Without --live, the script is a zero-request preview.
+
+Numeric-input revision: valid numeric strings such as "3"/"3.0" and explicit
+hotel labels such as "3-star" normalize to an integer. Fractions, ranges and
+ambiguous labels remain invalid. Rejected Supervisor decisions retain their
+parsed values and reported usage; parser/truncation failures also retain available
+usage. Unavailable usage is null/unknown, never inferred as zero consumption.
+
+The historical Supervisor schema integer/number overlap has been fixed and
+verified live. The original Supervisor-only check is retained for diagnosis and
+need not be rerun if already passed.
 
 Add keys locally only when live integration testing begins. Never paste them in
 chat, commit `.env`, or upload a project ZIP containing populated credentials.

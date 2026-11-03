@@ -76,3 +76,14 @@ https://railradar.in/docs ; https://open-meteo.com/en/docs ;
 https://console.groq.com/docs . Prior probes inform the implementation, but
 current documentation and actual normalized response tests must establish each
 adapter contract before claiming support.
+
+
+## Application verification through checkpoint 05
+
+The corrected Supervisor wrapper passed a live request with all fixed preference
+checks true, using 1,161 reported tokens. All four role implementations now pass
+intercepted-HTTP integration tests (part of 64 offline tests). The live four-role
+check still uses synthetic travel evidence and is pending user verification.
+Actual SerpApi/RailRadar/weather adapters and LangChain tool-use integration are
+not implemented in this checkpoint; earlier endpoint probes remain supporting
+evidence, not proof of those future adapters. Seat availability stays unverified.

@@ -1,7 +1,8 @@
 """Readable orchestration tested with injected, explicitly synthetic workers.
 
 An optional Supervisor turns natural language into validated preference updates.
-Other LLM specialists/provider adapters are not integrated yet.
+Specialists are injected functions or LLM agent objects; live travel adapters
+are not integrated yet in checkpoint 05.
 """
 from collections.abc import Callable
 
@@ -15,6 +16,7 @@ from backend.llm import ModelCallError
 from backend.schemas import HotelOffer, TransportOffer, TripPreferences
 from backend.services.costs import summarize_costs
 from backend.services.replanning import affected_components
+from backend.services.offer_filters import transport_leg
 
 TransportWorker = Callable[[TripPreferences], list[TransportOffer]]
 HotelWorker = Callable[[TripPreferences], list[HotelOffer]]
@@ -41,6 +43,7 @@ def prepare(state: TripState) -> dict:
     updates = {"preferences": preferences.model_dump(mode="json"), "request_patch": {},
                "missing_fields": preferences.missing_required(), "input_error": None,
                "pending": pending, "invalidated": sorted(affected), "warnings": [],
+               "agent_usage": {}, "model_failed": False, "specialist_error": None,
                "status": "needs_input" if preferences.missing_required() else "planning",
                "trace": (["Supervisor interpreted the user request."] if state.get("supervisor_decision") else [])
                         + ["Validated structured preferences."]}
@@ -72,6 +75,8 @@ def clarify(state: TripState) -> dict:
 def dispatch(state: TripState) -> str:
     if state.get("input_error") or state.get("missing_fields"):
         return "clarify"
+    if state.get("model_failed"):
+        return "finalize"
     return state["pending"][0] if state.get("pending") else "finalize"
 
 
@@ -81,17 +86,19 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
     """Workers do the task; this graph enforces the sequence and state updates.
 
     The caller owns the checkpointer's lifetime. No in-memory fallback silently
-    substitutes for durable storage. Only Supervisor has a live LLM path in
-    checkpoint 04; demo specialists remain explicitly synthetic.
+    substitutes for durable storage. Checkpoint 05 can inject all four real
+    LLM roles with synthetic travel evidence, or use zero-call demo workers.
     """
     def supervise(state: TripState) -> dict:
         message = state.get("user_message", "")
         if not message:
             return {"supervisor_failed": False, "message_only": False,
+                    "agent_usage": {}, "model_failed": False, "specialist_error": None,
                     "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": None,
                     "supervisor_error_detail": None}
         if state.get("request_patch"):
             return {"user_message": "", "supervisor_failed": True, "status": "supervisor_error",
+                    "agent_usage": {}, "model_failed": False, "specialist_error": None,
                     "warnings": ["Supply either a user message or a structured patch, not both."],
                     "supervisor_http_status": None, "supervisor_error_detail": None}
         try:
@@ -100,11 +107,13 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
             turn = supervisor_worker(message, TripPreferences.model_validate(state.get("preferences", {})))
         except ModelCallError as exc:
             return {"user_message": "", "supervisor_failed": True, "status": "supervisor_error",
+                    "agent_usage": {}, "model_failed": False, "specialist_error": None,
                     "warnings": [str(exc)], "trace": ["Supervisor failed; prior preferences preserved."],
-                    "supervisor_decision": None, "model_usage": {}, "supervisor_http_status": exc.http_status,
+                    "supervisor_decision": exc.parsed_decision, "model_usage": exc.model_usage or {}, "supervisor_http_status": exc.http_status,
                     "supervisor_error_detail": exc.provider_error}
         message_only = turn.decision.intent in ("question", "unsupported")
         return {"user_message": "", "request_patch": turn.patch, "supervisor_failed": False,
+                "agent_usage": {}, "model_failed": False, "specialist_error": None,
                 "message_only": message_only, "supervisor_decision": turn.decision.model_dump(),
                 "supervisor_http_status": None,
                 "supervisor_error_detail": None,
@@ -114,14 +123,26 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
     def after_supervisor(state: TripState) -> str:
         return END if state.get("supervisor_failed") or state.get("message_only") else "prepare"
 
+    def model_failure(state, role, exc, worker):
+        return {"model_failed": True, "specialist_error": {"role": role, "http_status": exc.http_status,
+                    "details": exc.provider_error, "message": str(exc)},
+                "warnings": state.get("warnings", []) + [str(exc)],
+                "agent_usage": state.get("agent_usage", {}) | {role: {
+                    key: getattr(worker, "usage", {}).get(key, 0) + (exc.model_usage or {}).get(key, 0)
+                    for key in set(getattr(worker, "usage", {})) | set(exc.model_usage or {})}},
+                "trace": state["trace"] + [role + " model failed; further model work stopped."]}
+
     def transport(state: TripState) -> dict:
         try:
             offers = transport_worker(TripPreferences.model_validate(state["preferences"]))
             data = [TransportOffer.model_validate(o).model_dump(mode="json") for o in offers]
             warnings = [] if data else ["No transport offers returned."]
+        except ModelCallError as exc:
+            return model_failure(state, "transport", exc, transport_worker) | {"transport": []}
         except (ValueError, OSError, TimeoutError):
             data, warnings = [], ["Transport step failed; no replacement offers were invented."]
         return {"transport": data, "pending": [p for p in state["pending"] if p != "transport"],
+                "agent_usage": state.get("agent_usage", {}) | {"transport": getattr(transport_worker, "usage", {})},
                 "warnings": state.get("warnings", []) + warnings,
                 "trace": state["trace"] + ["Transport step completed."]}
 
@@ -130,9 +151,12 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
             offers = hotel_worker(TripPreferences.model_validate(state["preferences"]))
             data = [HotelOffer.model_validate(o).model_dump(mode="json") for o in offers]
             warnings = [] if data else ["No hotel offers returned."]
+        except ModelCallError as exc:
+            return model_failure(state, "hotels", exc, hotel_worker) | {"hotels": []}
         except (ValueError, OSError, TimeoutError):
             data, warnings = [], ["Hotel step failed; no replacement offers were invented."]
         return {"hotels": data, "pending": [p for p in state["pending"] if p != "hotels"],
+                "agent_usage": state.get("agent_usage", {}) | {"hotels": getattr(hotel_worker, "usage", {})},
                 "warnings": state.get("warnings", []) + warnings,
                 "trace": state["trace"] + ["Hotel step completed."]}
 
@@ -142,20 +166,48 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
             if not isinstance(draft, dict):
                 raise ValueError("Invalid itinerary worker output")
             warnings = []
+        except ModelCallError as exc:
+            return model_failure(state, "itinerary", exc, itinerary_worker) | {"itinerary": None}
         except (ValueError, OSError, TimeoutError):
             draft, warnings = None, ["Itinerary step failed; draft is unavailable."]
+        warnings += (draft or {}).get("warnings", []) + (draft or {}).get("validation_errors", [])
         return {"itinerary": draft, "pending": [p for p in state["pending"] if p != "itinerary"],
+                "places": (draft or {}).get("places", state.get("places", [])),
+                "agent_usage": state.get("agent_usage", {}) | {"itinerary": getattr(itinerary_worker, "usage", {})},
                 "warnings": state.get("warnings", []) + warnings,
                 "trace": state["trace"] + ["Itinerary step completed."]}
 
     def finalize(state: TripState) -> dict:
-        # Selection/ranking/offer compatibility are not implemented here yet.
-        # Therefore this orchestration checkpoint cannot claim a payable total
-        # by arbitrarily treating the first returned offer as a selection.
         preferences = TripPreferences.model_validate(state["preferences"])
-        costs = summarize_costs({}, preferences.currency).model_dump(mode="json") if preferences.currency else None
-        return {"status": "workflow_complete", "costs": costs,
-                "trace": state["trace"] + ["Workflow complete; offer selection and plan validation still pending."]}
+        draft, quotes = state.get("itinerary") or {}, {}
+        ids = draft.get("recommended_offer_ids", {})
+        # Recommendations are supplied by the ranked-offer scheduling path;
+        # legacy routing-only fixtures have no selections and keep costs unknown.
+        for data in state.get("transport", []):
+            offer = TransportOffer.model_validate(data)
+            leg = transport_leg(offer, preferences)
+            if leg and ids.get(leg) == offer.id:
+                quotes[leg] = offer.price
+        for data in state.get("hotels", []):
+            offer = HotelOffer.model_validate(data)
+            if ids.get("hotel_stay") == offer.id:
+                quotes["hotel_stay"] = offer.price
+        costs = summarize_costs(quotes, preferences.currency, preferences.budget_total).model_dump(mode="json") if preferences.currency else None
+        warnings = list(state.get("warnings", []))
+        status = "workflow_complete"
+        if draft.get("plan_status"):
+            status = "draft_ready" if draft["plan_status"] == "valid_draft" and len(quotes) == 3 else "draft_needs_review"
+            if costs is None or costs["complete_subtotal"] is None:
+                warnings.append("Complete transport/hotel cost is unverified.")
+            elif costs["budget_status"] == "over_budget":
+                warnings.append("Recommended transport/hotel subtotal exceeds the stated budget.")
+                status = "draft_needs_review"
+            if status == "draft_ready" and warnings:
+                status = "draft_ready_with_warnings"
+        if state.get("model_failed"):
+            status = "partial_results"
+        return {"status": status, "costs": costs, "warnings": warnings,
+                "trace": state["trace"] + ["Draft recommendation finalized; bookings, locks and version storage are not applied."]}
 
     builder = StateGraph(TripState)
     builder.add_node("supervisor", supervise)

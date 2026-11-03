@@ -1,7 +1,9 @@
 """Extract preference updates; Python still enforces routing and constraints."""
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import json
+import re
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -51,11 +53,18 @@ def validated_patch(decision: SupervisorDecision, current: TripPreferences) -> d
             raise ModelCallError("Duplicate preference updates; no preferences were applied.")
         value = update.value
         if update.field in ("adults", "hotel_class", "flight_sort_by") and value is not None:
-            # StrictFloat accepts JSON integers as floats. Convert only exact
-            # whole values; never truncate a fractional traveler/star count.
-            if type(value) is not float or not value.is_integer():
+            # The generic update schema also accepts strings. Normalize exact
+            # numeric strings and explicit hotel-star labels, never fractions.
+            if update.field == "hotel_class" and isinstance(value, str):
+                value = re.sub(r"^([1-5])\s*(?:-\s*)?stars?$", r"\1", value.strip(), flags=re.IGNORECASE)
+            try:
+                number = Decimal(str(value)) if type(value) in (str, int, float) else Decimal("NaN")
+            except InvalidOperation:
+                number = Decimal("NaN")
+            if (not number.is_finite() or number != number.to_integral_value()
+                    or number.copy_abs() > 2**53 - 1):
                 raise ModelCallError(f"{update.field} requires a whole number; nothing was applied.")
-            value = int(value)
+            value = int(number)
         patch[update.field] = value
     if decision.intent in ("question", "unsupported") and patch:
         raise ModelCallError("Message-only response cannot change preferences.")
@@ -73,7 +82,8 @@ or unambiguously changed by the user; do not invent omitted dates, adults, budge
 currency, hotel class, rating, pace or interests. Omitted fields stay unchanged.
 Use a list of updates, each field once. Use null only when the user explicitly
 clears a preference. Dates are YYYY-MM-DD, money in decimal strings, interests a
-list of strings, adults an integer. Modes: train, flight, compare. Guest ratings
+list of strings; adults, hotel_class and flight_sort_by are JSON whole numbers,
+without units or star labels. Modes: train, flight, compare. Guest ratings
 are out of 5 and separate from star class. Map rupees to INR. Hotel class rule is
 exact unless the user explicitly says 'at least'/'and above'. Do not invent
 numeric provider sort codes from vague wording. Relative dates use today's date
@@ -102,4 +112,10 @@ class Supervisor:
             [SystemMessage(content=SYSTEM_PROMPT + "\nContext: " + json.dumps(context)),
              HumanMessage(content=message)])
         decision = SupervisorDecision.model_validate(result.parsed)
-        return SupervisorTurn(decision, validated_patch(decision, current), result.usage)
+        try:
+            patch = validated_patch(decision, current)
+        except ModelCallError as exc:
+            exc.model_usage = result.usage
+            exc.parsed_decision = decision.model_dump()
+            raise
+        return SupervisorTurn(decision, patch, result.usage)
