@@ -1,7 +1,7 @@
-# Checkpoint 02 walkthrough
+# Checkpoint 03 walkthrough
 
-The domain foundation is implemented. Agents, actual graph orchestration,
-provider clients and UI are not implemented yet.
+The domain foundation and graph orchestration are implemented. Live LLM agents,
+provider clients, offer selection, plan validation and UI are not implemented yet.
 
 ## Read in order
 
@@ -60,3 +60,49 @@ Run `venv\Scripts\python.exe -m pytest -q` from the Windows project root.
 Tests disable socket connections and use temporary fixture keys, not real .env.
 The separate environment script verifies imports and a tiny graph, not the
 travel graph. Offline tests passing do not prove live integrations work.
+
+## Follow the actual workflow
+
+Read backend/graph/state.py, then builder.py. TripState defines the JSON-compatible
+fields nodes share; credentials never enter it. prepare merges a structured
+request patch into existing validated preferences. Missing/invalid inputs route
+to clarify, which calls interrupt() before any specialist work. Resume on the
+same thread with Command(resume={...}); the reply is validated before proceeding.
+The caller must not launch a fresh ordinary turn while a clarification is pending.
+
+The dispatch function reads the pending list: transport first, hotels next,
+itinerary last. Each completed node removes its task and routes back through
+dispatch. This is conditional-edge routing, not an LLM choosing arbitrary code.
+Changed preferences use the existing dependency table. Interests-only updates
+preserve transport/hotels and rerun itinerary; date updates invalidate dependent
+offers before new work begins. No-change turns run no workers. Independent
+thread IDs isolate separate trip state; one trip is processed serially.
+
+Workers are ordinary injected functions with explicit signatures so the real
+agent integration can replace synthetic workers later without rewriting edges.
+The included backend/demo_workers.py supports only the Delhi-Jaipur fixture;
+all its sources and itinerary outputs are labeled synthetic. It is not a fallback
+for live errors and does not pretend to schedule attractions or honor arbitrary
+user search filters. Invalid/unsupported demo requests are not live searches.
+
+Expected worker errors return warnings and empty affected results; remaining
+steps can still complete. Errors are not replaced with invented offers. The
+workflow's final status is workflow_complete, not plan_validated. Since offers
+have not been selected, finalization cannot pick an arbitrary first quote and
+claim affordability: the complete subtotal stays unknown.
+
+## Checkpoint persistence
+
+The caller supplies a checkpointer and controls its lifetime. The command-line
+demo uses InMemorySaver and loses state when it exits. A test uses SqliteSaver,
+closes it, rebuilds the graph on the same temporary database and resumes the
+clarification. Persistent application trip handling and product version storage
+are still pending; graph checkpoints are not numbered plan versions.
+
+The invoke calls use a recursion_limit of 30 to catch accidental routing cycles.
+This is a graph-safety limit, not the old API-probe request cap. User clarification
+can pause for as long as needed without issuing model/provider calls.
+
+Demo command: `venv\Scripts\python.exe scripts\demo_workflow.py`.
+Expected: missing-date clarification, workflow_complete, then an interests-only
+change whose trace contains no repeat transport/hotel work. No API keys required.

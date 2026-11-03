@@ -1,7 +1,9 @@
 # Agreed architecture — implementation blueprint
 
-Status: orchestration is planned. Checkpoint 02 implements domain schemas,
-configuration and cost/replanning/selection-lock primitives only.
+Status: Checkpoint 03 implements structured intake, clarification interrupts,
+work routing and shared state, exercised with synthetic workers. The diagram
+below remains the product blueprint: the LLM Supervisor and specialists,
+selection, plan validation/repair and snapshot finalization are not connected yet.
 
 ## Responsibilities
 
@@ -121,7 +123,11 @@ unverified provider information and excluded from the core subtotal.
 
 Implemented in checkpoint 02: backend/config.py, backend/schemas.py,
 backend/services/costs.py, backend/services/replanning.py and tests/test_domain.py.
-The rest of this module map is planned. Lock compatibility with changed offers
+Checkpoint 03 adds backend/graph/state.py and builder.py, synthetic demo workers,
+scripts/demo_workflow.py and tests/test_workflow.py. Intake currently accepts
+structured fields instead of natural-language messages. Its finalize node marks
+workflow completion, not a validated travel plan or saved product version.
+The remaining module map is planned. Lock compatibility with changed offers
 and graph enforcement remain pending; the primitive only detects replacement,
 removal and unlock attempts. No agent files are presented as working stubs.
 

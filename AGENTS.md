@@ -38,7 +38,8 @@ before editing. Update progress and walkthrough alongside implementation.
 ## Verification and continuation
 
 Commands: `python scripts/check_environment.py` and `python -m pytest -q`
-(offline). Tests currently cover domain rules, not the full app. Test routing,
+(offline). `python scripts/demo_workflow.py` exercises synthetic workflow routing.
+Tests currently cover domain and workflow rules, not the full app. Test routing,
 locks, dependency invalidation, time constraints and arithmetic, not prompt wording.
 Document exact executed checks, runtime, pending work, and simulated/live status.
 Do not claim the full application works on the strength of imports alone.

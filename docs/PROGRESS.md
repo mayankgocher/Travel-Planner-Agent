@@ -1,6 +1,6 @@
 # Progress and continuation checkpoint
 
-Updated: 3 November 2026 (India). Checkpoint 02: domain foundation.
+Updated: 3 November 2026 (India). Checkpoint 03: tested workflow orchestration.
 
 ## Completed and verified
 
@@ -12,22 +12,29 @@ Updated: 3 November 2026 (India). Checkpoint 02: domain foundation.
 - `python -m pytest -q`: 20 offline cases passed on Linux Python 3.12.14.
   Tests block network connections and use temporary fixture configuration.
 - No live provider calls were made while building checkpoint 02.
-- Windows Python 3.12.7 verification of new tests: pending.
+- User subsequently verified all 20 checkpoint 02 tests on Windows Python 3.12.7.
+- Checkpoint 03: 29 tests passed on Linux Python 3.12.14, plus the synthetic
+  command-line workflow demo. New tests cover clarification, resumption, partial
+  failure, no-change turns, selective rerouting, SQLite rebuild/resume and trip
+  isolation. Windows verification of these new tests remains pending.
 - Requirements unchanged. requirements-lock.txt is the Linux reference resolution,
   not a hash-locked cross-platform guarantee.
 
 ## Still planned, not implemented
 
-Four agents, real graph orchestration, clarification resumption, provider clients,
+Live LLM agents, provider clients,
 FastAPI routes, Streamlit, retained-lock compatibility checking, persistent trip
 state, snapshots, stale-version protection, timing validation/repair, Markdown
 export and systematic evaluation. These remain included in scope. The new
-replanning/lock functions are primitives; no running app enforces them yet.
+lock function remains a primitive; the graph uses replanning dependencies but
+does not yet enforce locks, select offers or validate travel plans. Structured
+intake, clarification and routing are implemented using synthetic workers.
 
 ## Exact next steps
 
-1. Add shared state and allowed graph routing; verify clarification and specialist
-   work ordering end to end with visibly labeled offline fixtures.
+1. Completed in checkpoint 03: shared state, intake validation, clarification and
+   conditional routing with synthetic workers. Application server integration and
+   full trip lifecycle are pending.
 2. Implement four agents and ChatGroq tool/structured output integration. Earlier
    raw HTTP Groq feasibility tests do not prove the wrapper path works.
 3. Add provider adapters using current documentation and sanitized probe examples.

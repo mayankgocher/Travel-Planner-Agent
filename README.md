@@ -1,18 +1,20 @@
 # Multi-agent travel planner
 
-Checkpoint 02 — configuration and domain rules, 3 November 2026.
+Checkpoint 03 — tested LangGraph orchestration, 3 November 2026.
 
 **This checkpoint is not yet a working travel application.** It contains the
 agreed design, environment templates, dependency pins, an offline environment
 check, validated domain models, configuration, cost/lock/replanning rules and
-20 offline tests. Agents, graph orchestration, API routes and frontend follow in
-later checkpoints. Do not present those planned features as completed.
+29 offline tests, and real LangGraph orchestration exercised with explicitly
+synthetic workers. Live LLM agents, API routes and frontend follow in later
+checkpoints. Do not present those planned features as completed.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
 01 dependency installation and graph smoke check on Windows Python 3.12.7.
-Checkpoint 02 domain tests passed on Linux Python 3.12.14; running those tests
-on the user's Windows environment is the next verification step.
+Checkpoint 02's 20 tests also passed on Windows Python 3.12.7. Checkpoint 03's
+29 tests passed on Linux Python 3.12.14; Windows verification of the new workflow
+is the next step.
 
 ## Read first
 
@@ -36,6 +38,7 @@ py -3.12 -m venv venv
 .\venv\Scripts\python.exe -m pip install -r requirements.txt
 .\venv\Scripts\python.exe scripts\check_environment.py
 .\venv\Scripts\python.exe -m pytest -q
+.\venv\Scripts\python.exe scripts\demo_workflow.py
 ```
 
 If the version check fails, use the absolute path of your installed Python
@@ -47,10 +50,12 @@ The environment check sends **no network requests** and does not read API keys.
 It prints package versions and verifies a tiny LangGraph can execute. No server
 or Streamlit app launch command exists yet.
 
-If you already installed checkpoint 01 successfully, keep the existing venv:
-dependencies are unchanged. Run only `venv\Scripts\python.exe -m pytest -q`
-after applying checkpoint 02. Tests use temporary fixture keys and do not load
-your real .env. No live API calls occur.
+If you already installed checkpoint 02 successfully, keep the existing venv:
+dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 03.
+Tests use temporary fixture keys and do not load your real .env. No live API
+calls occur. The demo uses in-memory checkpoints only; a test separately verifies
+SQLite persistence across graph rebuilds. Demo results are not travel offers.
 
 Add keys locally only when live integration testing begins. Never paste them in
 chat, commit `.env`, or upload a project ZIP containing populated credentials.
