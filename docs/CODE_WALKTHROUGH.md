@@ -1,4 +1,4 @@
-# Checkpoint 08 walkthrough
+# Checkpoint 09 walkthrough
 
 Four LLM roles, graph orchestration and draft schedule/cost checks are implemented
 using synthetic graph retrieval. Separate hotel/Maps/flight/rail adapters are implemented;
@@ -341,9 +341,42 @@ not end-user defaults or an automatic metro resolver.
 `check_rail.py` makes no Groq/SerpApi/seat/PNR requests. The output is retrieval
 verification, not an itinerary. The graph's synthetic four-role path is unchanged.
 Return leg reversal/date handling is tested offline; this probe is outbound only.
-The latest suite has 178 tests. Existing dependencies and venv are unchanged.
+Checkpoint 08 had 178 tests. Existing dependencies and venv are unchanged.
 
 The flight report contained three generic skips. `FlightRecordError` now provides
 fixed reason codes and validated airport IDs in SearchResult.skipped_records;
 unexpected exception strings remain hidden. This improves future diagnostics
 without new API calls or pretending the older omitted records can be recovered.
+
+## Checkpoint 09: learn the assumed-fare path
+
+Start with `backend/services/demo_fares.py`: one range dictionary and one function.
+The dictionary has class ranges, not a list of trains. The function validates
+train/route/class evidence, builds the four-part key, calculates SHA-256 modulo
+the inclusive range, and multiplies by adults. Its return is a new typed offer;
+the original and schedule Source remain unchanged. Everything in the price is
+explicitly a demo assumption, including the per-adult unit and version identifier.
+
+Then read the mock/live branch in `RailRadarAdapter.search_leg()`. Both modes use
+the same real schedule/timetable checks. Mock handles up to two confirmed shortlist
+matches locally; live makes at most one fare request. There is no failure-triggered
+switch between modes. A class confirmed before a paid request stays confirmed if
+the request fails. Settings defaults TRAIN_FARE_MODE to mock, even in an older .env.
+
+`check_rail.py --replay-report` is the quickest verification: it loads a saved
+generated report, validates stored offer/timetable models, applies assumptions
+only to matching evidence, and saves a new HTML/JSON/ZIP report. No Settings/HTTP
+client initialization, keys or requests. Historical timestamps are retained and
+the report says saved replay. CLI --live is a separate mutually exclusive action.
+
+In `services/costs.py`, assumed amounts are excluded from known/verified totals.
+Complete actual affordability stays unknown. If all required amounts otherwise
+have complete comparable scope, separate illustrative fields demonstrate budget
+reasoning. Missing real scope does not disappear because a train price is mocked.
+Graph finalization and agent warnings retain the illustrative label; future UI,
+snapshot and export code must use these fields without calling them real prices.
+
+The suite now has 209 tests. They cover unseen combinations and all class ranges,
+cross-process/hash-seed stability, evidence guards, adult multiplication, mode
+separation, zero-network replay and a four-agent draft with explicit assumed-price
+warnings and unknown real affordability. No new framework or dependency was added.

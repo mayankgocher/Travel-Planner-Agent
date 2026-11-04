@@ -196,4 +196,31 @@ null. No full trip affordability claim can follow from the probe passing.
 Offline replay passed: T02 normalized 20 scheduled services, T07 normalized train
 12952 coach classes/stops, T05 preserved INR 3,165 as an unverified quote with 12
 numeric components. No fresh live API requests here. Station lookup/current fare
-access and new Windows execution remain pending. Full offline suite: 178 tests.
+access and new Windows execution were pending when checkpoint 08 was delivered.
+That checkpoint's full offline suite had 178 tests. Subsequent results follow.
+
+## Actual rail result and approved mock-price mode
+
+Reviewed share_results(20261103-175535).zip: five HTTP 200 responses confirmed
+station lookups, two scheduled services, and timetables for 12958 and 12015.
+The 12015 CC fare call returned HTTP 403, code PLAN_UPGRADE_REQUIRED. The response
+said fare access needs a Developer/Growth/Scale subscription. Reported remaining
+monthly quota: 86. This was neither a rejected API key nor quota exhaustion.
+Prior successful fare probes do not override this newer access result.
+
+The user approved explicitly assumed train prices for interview demos instead
+of purchasing a rail subscription. No claim is made that these are real or
+estimated railway fares. The SHA-256 generator is our own demo rule, not provider
+data. It supports any new confirmed five-digit train/route/class combination,
+using arbitrary class ranges and a reproducible per-adult result. Mock mode
+never queries the paid fare endpoint; live failures never switch automatically.
+
+Zero-network replay of the reviewed report passed: 12015 CC received an assumed
+INR 618 per adult / INR 1,236 for two; 12958 has no CC and stayed unpriced. Source
+timestamps and real schedule metadata were preserved. This is historical evidence
+replay, not fresh availability. Independent synthetic hashing example 13240 /
+NDLS / JP / 3A gives INR 897 per adult; no route/class validity follows from it.
+
+Checkpoint 09 has 209 passing offline tests on Linux Python 3.12.14, including
+restart stability and four-role disclosure/illustrative cost behavior. No fresh
+travel-provider calls were made. Windows verification/replay remain pending.

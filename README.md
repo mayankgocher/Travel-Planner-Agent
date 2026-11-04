@@ -1,6 +1,6 @@
 # Multi-agent travel planner
 
-Checkpoint 08 — RailRadar retrieval and bounded live check, 3 November 2026.
+Checkpoint 09 — deterministic assumed train fares, 4 November 2026.
 
 **This is not yet a complete travel application.** The Supervisor, Transportation,
 Hotel and Itinerary LLM roles are connected through LangGraph. Their existing
@@ -9,7 +9,7 @@ SerpApi hotel and Maps adapters passed a real retrieval check on Windows. Separa
 flight retrieval also passed its real two-direction check on Windows. The rail
 adapter is now implemented and offline-tested. Real providers are not wired into
 the graph yet. Weather, general location selection, UI, locks, numbered versions
-and export remain pending. There are 178 offline tests.
+and export remain pending. There are 209 offline tests. Mock train pricing is explicit; real fare access is still paid.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
@@ -25,8 +25,11 @@ live travel accuracy. The user then verified the hotel/Maps live check: two HTTP
 type, taxes and unreturned weekday hours remain unverified. The flight live check
 then returned 8 outbound and 7 return options in two HTTP 200 requests. Three
 records were skipped; their precise reasons were not captured in that older
-report. Checkpoint 08 adds safe specific skip diagnostics. Its 178 offline tests
-pass on Linux Python 3.12.14; Windows tests and new rail retrieval remain pending.
+report. The rail live check then passed lookup/schedules/class checks but its fare
+request returned HTTP 403 PLAN_UPGRADE_REQUIRED (86 monthly requests remained).
+The user approved deterministic assumed fares for the interview demo. Checkpoint
+09 has 209 passing offline tests on Linux Python 3.12.14; Windows verification
+remains pending. Saved real schedules/classes and assumed prices are labelled separately.
 Dependencies are unchanged.
 
 ## Read first
@@ -66,9 +69,9 @@ or Streamlit app launch command exists yet.
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.
 
-If you already installed checkpoint 07 successfully, keep the existing venv:
+If you already installed checkpoint 08 successfully, keep the existing venv:
 dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
-`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 08.
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 09.
 Tests use temporary fixture keys and do not load your real .env. No live API
 calls occur. The demo uses in-memory checkpoints only; a test separately verifies
 SQLite persistence across graph rebuilds. Demo results are not travel offers.
@@ -208,59 +211,79 @@ the itinerary validator prevents scheduling both and keeps their hours unverifie
 This heuristic does not automatically merge nearby distinct attractions. Partial
 weekday schedules now have an explicit missing-hours warning.
 
-## New: outbound rail retrieval check
+## New: deterministic train demo fares
 
-After offline tests pass, fill `RAILRADAR_API_KEY` in the project's local `.env`
-using your existing RailRadar key. Preserve the other entries. No key belongs in
-chat. No dependency installation or venv recreation is needed.
+The prior RailRadar run confirmed station lookup, two scheduled trains and their
+operated classes. Its fare call returned 403 PLAN_UPGRADE_REQUIRED. No subscription
+was purchased. The user explicitly approved assumed train prices for the demo.
+
+`TRAIN_FARE_MODE=mock` is now the default, including when this new variable is
+absent from an existing .env. The installer preserves .env and venv. You may add
+this setting locally; no new dependency, key or train-by-train fare table is needed.
+`live` keeps real pricing separate and never falls back silently to mock after errors.
+
+First verify using your already-saved report, with **zero API calls and no keys loaded**:
 
 ```powershell
-.\venv\Scripts\python.exe scripts\check_rail.py
-.\venv\Scripts\python.exe scripts\check_rail.py --live
+.\venv\Scripts\python.exe scripts\check_rail.py --replay-report "D:\Projects\GenAI\Agentic AI\Travel Planning Agent\data\reports\rail_20261103_175413_908487_cb1234\share_results.zip"
 ```
 
-Preview makes zero calls. Live makes **at most six RailRadar requests**, outbound
-Delhi NDLS to Jaipur JP only: two exact-code station lookups, one Trains Between,
-up to two shortlisted train timetables, and at most one fare. It stops on HTTP/
-provider errors, an exhausted reported quota or the local request budget. There
-are no automatic retries, sleeps, seat/PNR/live-running requests, Groq or SerpApi
-calls. Each live rerun makes fresh requests; this is not a duplicate-aware ledger.
+The replay accepts a generated report.json or share_results.zip, validates stored
+train/route/class evidence, and writes a new report folder. It never modifies the
+input, renews historical source timestamps or calls the paid endpoint. Old data
+remain old data: this is not a fresh seat/availability/schedule check. The reviewed
+report prices train 12015 in CC; train 12958 does not operate CC, so it stays unpriced.
+Read the new report.html and share only its share_results.zip if needed.
 
-The fixed probe requests two adults, General quota GN, class CC (Chair Car),
-departure 14 days after execution. `--date YYYY-MM-DD` and `--class-code 3A` can
-override the test inputs. These are not default end-user preferences. The return
-date in the preferences is unused by this outbound-only probe; return rail is
-covered offline but not yet live-tested. The station choices are explicit probe
-bindings, not automatic city/metro resolution. Class must be clarified before a
-fare search in the later full application; it will not silently choose CC.
+How the assumption works, in `backend/services/demo_fares.py`:
 
-Python sorts the schedule shortlist by duration then departure. Timetables are
-needed here to confirm operated coach classes and ordered stops before fetching
-a fare. `availableClasses` means coach classes, not vacant seats. A train that
-does not confirm the requested class is skipped; at most one more is inspected.
-Remaining services stay unpriced. No usable quote yields REVIEW_REQUIRED, rather
-than scanning every service or pretending the journey is free.
+1. Confirm the train, operated class and uniquely ordered station pair from evidence.
+2. Build `train_number|boarding_code|destination_code|class` and hash with SHA-256.
+3. Map the integer to an arbitrary inclusive per-adult class range.
+4. Multiply this invented unit amount by the stated adult count in Python.
 
-The parser preserves boarding-station dates and overnight day differences. It
-supports standard five-digit train identifiers. Rail prices remain INR; missing
-totals stay null. Fare components such as GST are retained, but traveler scope,
-tax completeness and all payable charges remain unverified. Amounts are not
-multiplied by adults. A passing probe does not establish complete affordability.
-Source URLs point to RailRadar's general website, not a verified booking page.
+Any new valid five-digit train/route/class combination works without a lookup table.
+Same key/rule version gives the same per-adult amount across process restarts. Date
+and passenger count are excluded from the hash; changing adult count changes only
+the party total. Different keys may share a value. The ranges do not model distance,
+season, real taxes or actual railway pricing. They are not market-price estimates.
+For the hashing example `13240|NDLS|JP|3A`, the result is INR 897 per adult, 1,794 for
+two adults. That example alone does not establish that train's route/class validity.
+Rule version is sha256-class-v1; bump it if ranges/key rules change.
 
-Read `data/reports/rail_<unique run>/report.html`: preferences, station candidates,
-scheduled trains, quote/class, timetables, numeric fare components, quota headers
-and exact request inputs. A failed fare request preserves retrieved schedules.
-Only HTML/JSON go into `share_results.zip`; share that ZIP. No keys, raw response
-bodies, private reasoning or authorization headers are saved. The fare docs URL
-currently redirects, while earlier saved fare responses succeeded; this explicit
-live check is needed to establish current endpoint access. Do not infer a missing
-fare as zero, or switch providers silently.
+Each generated quote carries pricing_mode=demo, per_adult_amount, demo_rule_version
+and an ASSUMED DEMO FARE notice. The schedule's Source remains unchanged; RailRadar
+did not supply that price. Seats remain unverified. Actual schedule/place fixtures
+are still kept separate from real evidence; the approved exception is price-only.
 
-Add keys locally only when live integration testing begins. Never paste them in
-chat, commit `.env`, or upload a project ZIP containing populated credentials.
-When sharing the folder, use a clean export excluding `.env`, `venv/`, `data/`
-and logs. `.gitignore` does not sanitize arbitrary ZIPs or untrack existing files.
+Verified totals exclude demo prices. `budget_status` stays unknown and
+`complete_subtotal` stays null if any selected price is assumed. When all required
+components otherwise have complete comparable scope, `illustrative_subtotal` and
+`illustrative_budget_status` demonstrate budget reasoning under the assumptions.
+Missing fares, currency mismatch or incomplete live room/passenger/tax scope still
+prevent a full illustrative affordability decision. No assumed amount is a real
+payment quote. Unknown provider amounts are never turned into demo values implicitly.
+
+### Optional fresh retrieval — not required for this checkpoint
+
+```powershell
+.\venv\Scripts\python.exe scripts\check_rail.py --live --fare-mode mock
+```
+
+This explicitly spends at most FIVE RailRadar requests: two station lookups, one
+NDLS-to-JP service search and up to two timetables. Confirmed shortlist matches
+receive assumed fares locally; /fare is never called. Default test inputs are two
+adults, CC, departure +14 days, GN context. --date YYYY-MM-DD / --class-code 3A
+change probe inputs. Only the bounded shortlist is checked; other services stay
+unpriced. These are probe choices, not default end-user preferences or a general
+metro-station resolver. No Groq, SerpApi, seats, PNR, bookings or payments.
+
+`--live --fare-mode live` explicitly requests the paid fare endpoint (at most SIX
+requests, one fare). It is retained for future paid access; do not rerun it with
+this restricted key. Failures preserve confirmed class and schedule evidence, keep
+price unknown and never switch to mock. Return direction has offline coverage;
+the fresh probe remains outbound only. Existing four-role check_agents.py still
+uses synthetic retrieval. Providers are not wired into the graph yet.
 
 ## Planned product
 

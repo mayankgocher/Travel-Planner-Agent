@@ -35,7 +35,7 @@ def offline(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
 
 
-def run_agents(fault=None):
+def run_agents(fault=None, assumed_fares=False):
     calls, schedule_calls = [], []
     def handle(request):
         wire = json.loads(request.content)
@@ -64,7 +64,17 @@ def run_agents(fault=None):
             "usage": {"prompt_tokens": 100, "completion_tokens": 100, "total_tokens": 200}})
     with httpx.Client(transport=httpx.MockTransport(handle)) as client:
         model = create_model(Settings(_env_file=None, groq_model="openai/gpt-oss-120b", groq_api_key="fixture-secret"), http_client=client)
-        graph = build_workflow(TransportationAgent(model, fixtures.transport), HotelAgent(model, fixtures.hotels),
+        def transport_search(p):
+            offers = fixtures.transport(p)
+            if assumed_fares:
+                for offer in offers:
+                    if offer.mode == "train":
+                        offer.price.pricing_mode = "demo"
+                        offer.price.per_adult_amount = offer.price.amount / offer.adults
+                        offer.price.demo_rule_version = "test-assumption"
+                        offer.price.taxes_included = None
+            return offers
+        graph = build_workflow(TransportationAgent(model, transport_search), HotelAgent(model, fixtures.hotels),
                                ItineraryAgent(model, fixtures.places), InMemorySaver(), Supervisor(model))
         result = graph.invoke({"user_message": "Fixture test request; data are synthetic."},
                               {"configurable": {"thread_id": "all-agents"}, "recursion_limit": 30})
@@ -80,6 +90,16 @@ def test_four_agents_create_grounded_draft_and_python_subtotal():
     assert result["agent_usage"]["itinerary"]["total_tokens"] == 200
     assert {h["id"] for h in result["hotels"]} == {"FIXTURE-H1", "FIXTURE-H2"}
     assert all(o["mode"] == "train" for o in result["transport"])
+
+
+def test_four_agent_graph_discloses_demo_prices_and_never_claims_real_affordability():
+    result, calls = run_agents(assumed_fares=True)
+    assert result["status"] == "draft_ready_with_warnings" and result["itinerary"]["contains_assumed_prices"]
+    assert result["costs"]["budget_status"] == "unknown" and result["costs"]["complete_subtotal"] is None
+    assert result["costs"]["illustrative_subtotal"] == "16900"
+    assert result["costs"]["illustrative_budget_status"] == "within_assumed_budget"
+    assert result["costs"]["known_subtotal"] == "12000"
+    assert any("illustrative" in warning for warning in result["warnings"])
 
 
 def test_invalid_timing_gets_one_successful_correction():

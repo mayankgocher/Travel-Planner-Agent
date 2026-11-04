@@ -1,7 +1,9 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 08 retains four LLM roles using explicitly synthetic graph
+Status: Checkpoint 09 retains four LLM roles using explicitly synthetic graph
 retrieval and separate hotel/Maps/flight/rail adapters with bounded live checkers.
+Train pricing now has an explicitly approved deterministic mock mode. Schedule
+and price provenance are separate; graph live retrieval/UI remain pending.
 The diagram remains the product blueprint: provider-to-graph integration, other
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
@@ -260,3 +262,35 @@ Flight normalization now returns safe skipped-record codes and known airport IDs
 exception text and raw discarded records are not saved. This improves future
 diagnostics; it cannot reconstruct the three records omitted in the reviewed live
 flight report. No repeat of successful flights is required for the rail checkpoint.
+
+## Checkpoint 09 approved price assumptions
+
+The paid rail fare call returned PLAN_UPGRADE_REQUIRED. The user approved assumed
+train fares for the interview demo, including unseen train/route/class combinations.
+This changes the price-source policy, not schedule truthfulness or agent count.
+
+services/demo_fares.py validates evidence, hashes train|from|to|class with SHA-256,
+maps to an arbitrary class range, and multiplies the invented per-adult amount by
+adults. No per-train table, LLM guessing, process-random hash, network call or new
+agent. Date and passenger count do not enter the per-adult key. Rule version tracks
+range/key changes; neither distance nor real railway pricing is modelled.
+
+PriceQuote.pricing_mode=demo, per_adult_amount and demo_rule_version identify the
+assumption. Source continues describing the real schedule. Synthetic schedule/
+place fixture separation stays enforced; only explicitly labelled price assumptions
+can accompany confirmed real evidence. Mock mode does not create unsupported
+routes/classes, verify seats or imply a current fare quote.
+
+TRAIN_FARE_MODE defaults to mock. Mock retrieval checks up to two shortlisted
+services and never calls /fare. Explicit live mode keeps the paid endpoint and
+does not fall back to mock on failure. Class evidence survives a failed fare call.
+check_rail.py --replay-report can apply mock prices to saved JSON/ZIP evidence with
+zero network calls and unchanged historical source timestamps. It is an explicit
+replay, not an implicit live-failure fallback or fresh availability check.
+
+CostSummary separates assumed_components and illustrative_subtotal/status from
+verified totals. Real budget_status remains unknown with any assumed price.
+Illustrative full-trip comparison needs all other required prices to have complete
+comparable scope; other unknown occupancy/taxes/currency still prevent a full
+decision. Agent prompts and graph warnings must preserve these distinctions.
+Future UI, versions and export must display ASSUMED DEMO FARE prominently.

@@ -1,6 +1,6 @@
 # Progress and continuation
 
-Updated 3 November 2026. Checkpoint 08: RailRadar adapter and bounded check.
+Updated 4 November 2026. Checkpoint 09: approved deterministic mock train pricing.
 
 ## Verified through checkpoint 05
 
@@ -121,25 +121,64 @@ Updated 3 November 2026. Checkpoint 08: RailRadar adapter and bounded check.
 - Rail fare docs URL redirects to the docs index; indexed official docs/pricing
   and saved responses still describe the endpoint. Current access is unverified.
   A failed fare call must preserve schedules and unknown prices, not fake data.
-- Checkpoint 08 Windows tests and the new bounded live rail check remain pending.
+- User ran the rail check on Windows. Five HTTP 200 responses verified station
+  lookup, two scheduled services, and train 12958/12015 operated classes/stops.
+  Request 6, 12015 CC fare, returned 403 PLAN_UPGRADE_REQUIRED. Remaining monthly
+  quota was 86; this was not key failure, rate limiting or bad parameters.
+  Reviewed share_results(20261103-175535).zip. No repeat is needed to diagnose it.
+- User then explicitly approved deterministic assumed train fares for interviews,
+  including unseen combinations. This is a price-only mock mode, not fabricated
+  schedule/class evidence or a subscription purchase.
+
+## Implemented in checkpoint 09
+
+- Small services/demo_fares.py hashes number|from|to|class with SHA-256, maps to
+  arbitrary class-specific integer ranges and multiplies by adult count. No date
+  or adults in the per-adult hash. Version sha256-class-v1; no per-train registry.
+- Evidence guards require matching number, operated class, ordered unique stops
+  and compatible source types. Unsupported/unconfirmed combinations stay unpriced.
+- PriceQuote carries pricing_mode=demo, per_adult_amount and demo_rule_version.
+  Real schedule Source metadata/timestamps stay unchanged. Taxes/payable fares
+  remain unverified; complete cannot be true for assumed prices.
+- TRAIN_FARE_MODE defaults to mock. Existing .env is preserved; absent new setting
+  takes this default. Explicit live mode remains and has no automatic mock fallback.
+- Mock searches check up to two shortlisted class-compatible trains without /fare;
+  the fresh probe spends at most five calls. Live keeps at most one fare/six calls.
+  Confirmed class is retained even if a paid fare request fails.
+- Verified cost sums exclude assumed components. Separate illustrative fields can
+  demonstrate budget arithmetic only with complete comparable remaining quotes.
+  Real budget_status stays unknown. Other unknown live scope is not papered over.
+- Agent notices/graph finalization disclose assumed prices and illustrative budget
+  decisions. Existing source fixture separation remains; the explicit approved
+  exception permits demo prices on confirmed real schedule metadata.
+- check_rail.py --replay-report reads the saved JSON/ZIP and generates a new mock
+  report with zero API calls, no keys loaded and unchanged historical timestamps.
+  It does not mutate input or imply a fresh availability check.
+- Actual saved-report replay passed: train 12015 CC INR 618/adult, INR 1,236 for two;
+  12958 has no CC, so no mock quote. These amounts are invented, not market estimates.
+- 209 offline tests passed on Linux Python 3.12.14, covering unseen keys, all
+  supported class ranges, restart/hash-seed stability, scope/route guards, party
+  math, no paid endpoint in mock mode, live failure without fallback, report replay
+  and four-agent illustrative cost disclosure. No dependency changes/live calls.
+- Windows tests and the new zero-network replay remain pending user verification.
 
 ## Next actions
 
-1. Install checkpoint 08, preserving .env/venv, and run 178 tests on Windows.
-2. User fills RAILRADAR_API_KEY locally using the existing key. Run check_rail.py
-   --live once, max six requests. Review share_results.zip, especially lookup,
-   current fare access, ordered stops, class and partial results/quota headers.
-   Do not repeat the passed Groq, hotel/Maps or flight live checks for this step.
-3. Implement general city-to-airport/station candidate selection and connect real
-   retrieval callbacks/tool definitions to agents. Clarify missing class/currency
-   before pricing. Preserve independent provider quotas and source uncertainty.
-   Derive hotel stay dates from actual arrival/departure, including overnight legs.
-4. Add optional near-term Open-Meteo daily weather and geographic relevance checks.
-   Missing hours and out-of-horizon forecasts stay unavailable, not invented.
-5. Add selection/lock compatibility, serialized trip updates, numbered view-only
-   snapshots, stale-version rejection and last-successful-plan preservation.
-6. Add thin FastAPI, Streamlit, final Supervisor explanation and Markdown download.
-   Finish representative evaluations, full live journeys and owner learning guide.
+1. Install checkpoint 09 preserving .env/venv; run 209 tests on Windows.
+2. Run check_rail.py --replay-report against the already-saved rail report. Zero
+   quota consumption and no keys needed. Review the new HTML/share_results.zip.
+   Do not rerun the blocked paid fare check or other already-passed live probes.
+3. Connect real provider retrieval callbacks/tool definitions and general city/
+   airport/station candidate selection. Propagate price provenance/notices through
+   every result, final explanation, UI, snapshot and Markdown export. Do not claim
+   actual affordability from illustrative values. Clarify missing class/currency.
+4. Derive hotel dates from actual transport arrival/departure (including overnight)
+   and add optional daily Open-Meteo weather/geographic checks. Unknown scope stays
+   visible. Missing or out-of-horizon forecasts are unavailable, not invented.
+5. Add selection/locks, serialized trip updates, numbered view-only snapshots,
+   stale-version rejection and last-successful-plan preservation.
+6. Add thin FastAPI/Streamlit, final explanation/Markdown download, representative
+   evaluations/full user journeys and owner learning guide.
 
 ## Still pending in agreed scope
 
@@ -153,6 +192,8 @@ product versions. No full application readiness claim is supported yet.
 Four agents; one destination; Python 3.12.7; LangGraph/LangChain, Groq, FastAPI,
 Streamlit. Windows root: D:\Projects\GenAI\Agentic AI\Travel Planning Agent.
 No automated booking/payment, separate search cache, vector database or RAG.
+Approved exception: deterministic, clearly labelled assumed train prices for demos;
+real schedule/class evidence is still required and real affordability stays unverified.
 Current trip results stay in graph state. Core subtotal is intercity transport
 plus hotels, excluding food/local transport/attractions. No extra attraction fee
 research. Selective replanning, minimal repair, locks, versions and download stay

@@ -70,11 +70,14 @@ class PriceQuote(DomainModel):
     covers_all_travelers: bool = False
     taxes_included: bool | None = None
     notes: list[str] = Field(default_factory=list)
+    pricing_mode: Literal["live", "demo"] = "live"
+    per_adult_amount: Money | None = None
+    demo_rule_version: str | None = None
 
     @property
     def complete(self) -> bool:
         # Taxes/occupancy must be known before claiming a complete payable total.
-        return (self.amount is not None and self.basis != "unverified"
+        return (self.pricing_mode != "demo" and self.amount is not None and self.basis != "unverified"
                 and self.covers_all_travelers and self.taxes_included is True)
 
 
@@ -159,6 +162,10 @@ class CostSummary(DomainModel):
     missing_or_unverified: list[Component]
     budget_status: Literal["unknown", "within_budget", "over_budget", "not_specified"]
     excluded_costs: list[str] = Field(default_factory=lambda: ["attractions", "food", "local_transport"])
+    assumed_components: list[Component] = Field(default_factory=list)
+    illustrative_subtotal: Money | None = None
+    illustrative_budget_status: Literal["unknown", "within_assumed_budget", "over_assumed_budget", "not_specified"] = "unknown"
+    pricing_notice: str | None = None
 
 
 class PlaceCandidate(DomainModel):

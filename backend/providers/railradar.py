@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from backend.providers.http import ProviderError
 from backend.providers.serpapi import SearchResult, money
 from backend.schemas import PriceQuote, Source, StationCandidate, TrainTimetable, TransportOffer
+from backend.services.demo_fares import apply_demo_fare
 
 INDIA = ZoneInfo("Asia/Kolkata")
 CLASSES = {"1A", "2A", "3A", "3E", "CC", "EC", "EA", "FC", "SL", "2S", "VS", "CH", "SH", "VC", "EV"}
@@ -139,8 +140,11 @@ def apply_fare(response, offer, travel_class):
 
 
 class RailRadarAdapter:
-    def __init__(self, http):
+    def __init__(self, http, *, fare_mode="mock"):
+        if fare_mode not in ("mock", "live"):
+            raise ValueError("Train fare mode must be mock or live")
         self.http = http
+        self.fare_mode = fare_mode
         self.last_result = None
         self.timetables, self.fare_components, self.priced_offer_ids = [], {}, []
 
@@ -178,14 +182,24 @@ class RailRadarAdapter:
             if timetable.stop_codes.count(origin.code) != 1 or timetable.stop_codes.count(destination.code) != 1 or timetable.stop_codes.index(origin.code) >= timetable.stop_codes.index(destination.code):
                 self.last_result.warnings.append(f"Train {offer.train_number} timetable did not confirm the ordered station pair; no fare requested.")
                 continue
-            response = self.http.get(f"/v1/trains/{offer.train_number}/fare", {"source": origin.code, "destination": destination.code,
-                "journeyDate": day.isoformat(), "classCode": p.train_class.upper(), "quotaCode": "GN"})
-            priced, components = apply_fare(response, offer, p.train_class.upper())
+            # Keep verified class knowledge even when a paid fare call fails.
+            confirmed = TransportOffer.model_validate(offer.model_dump() | {"travel_class": p.train_class.upper(),
+                "price": offer.price.model_dump() | {"notes": ["Scheduled service and requested coach class confirmed; fare and seats remain unverified."]}})
+            self.last_result.items = [confirmed if o.id == offer.id else o for o in self.last_result.items]
+            if self.fare_mode == "mock":
+                priced, components = apply_demo_fare(confirmed, timetable, p.train_class), {}
+            else:
+                response = self.http.get(f"/v1/trains/{offer.train_number}/fare", {"source": origin.code, "destination": destination.code,
+                    "journeyDate": day.isoformat(), "classCode": p.train_class.upper(), "quotaCode": "GN"})
+                priced, components = apply_fare(response, confirmed, p.train_class.upper())
             self.last_result.items = [priced if o.id == offer.id else o for o in self.last_result.items]
             self.fare_components[offer.id] = components
             if priced.price.amount is not None:
                 self.priced_offer_ids.append(offer.id)
-            break  # One fare maximum; do not scan the full route's services.
+            if self.fare_mode == "live":
+                break  # One paid fare maximum; no automatic fallback to mock.
+        if self.fare_mode == "mock" and self.priced_offer_ids:
+            self.last_result.warnings.append("ASSUMED DEMO FARES: prices and any resulting budget comparison are illustrative, not verified railway costs.")
         if not self.priced_offer_ids:
             self.last_result.warnings.append("No usable fare was obtained within the bounded shortlist; remaining services were not queried.")
         return self.last_result

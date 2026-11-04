@@ -202,6 +202,11 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
             elif costs["budget_status"] == "over_budget":
                 warnings.append("Recommended transport/hotel subtotal exceeds the stated budget.")
                 status = "draft_needs_review"
+            if costs and costs["assumed_components"]:
+                warnings.append(costs["pricing_notice"])
+                if costs["illustrative_budget_status"] == "over_assumed_budget":
+                    warnings.append("Illustrative subtotal exceeds the budget under the demo assumptions.")
+                    status = "draft_needs_review"
             if status == "draft_ready" and warnings:
                 status = "draft_ready_with_warnings"
         if state.get("model_failed"):

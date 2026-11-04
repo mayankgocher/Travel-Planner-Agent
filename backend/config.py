@@ -1,5 +1,6 @@
 """Load server-side configuration explicitly, not at module import time."""
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     serpapi_api_key: SecretStr = Field(default=SecretStr(""), exclude=True, repr=False)
     railradar_api_key: SecretStr = Field(default=SecretStr(""), exclude=True, repr=False)
     groq_model: str = "openai/gpt-oss-120b"
+    train_fare_mode: Literal["mock", "live"] = "mock"
     backend_url: str = "http://127.0.0.1:8000"
     app_timezone: str = "Asia/Kolkata"
     data_dir: Path = Path("data")

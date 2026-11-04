@@ -170,7 +170,7 @@ def test_ordered_small_shortlist_makes_one_fare_call_and_at_most_two_details():
     calls = []
     with httpx.Client(transport=httpx.MockTransport(handler_factory(calls, incompatible_first=True)), trust_env=False) as client:
         http = RailRadarHttp("offline-rail-key", max_requests=4, http_client=client)
-        adapter = RailRadarAdapter(http); result = adapter.search_leg(preferences(), NDLS, JP)
+        adapter = RailRadarAdapter(http, fare_mode="live"); result = adapter.search_leg(preferences(), NDLS, JP)
     assert [r.url.path for r in calls] == ["/v1/trains/between/NDLS/JP", "/v1/trains/12015", "/v1/trains/12966", "/v1/trains/12966/fare"]
     assert len(adapter.priced_offer_ids) == 1 and sum(o.price.amount is not None for o in result.items) == 1
     assert calls[-1].url.params["classCode"] == "CC" and calls[-1].url.params["quotaCode"] == "GN"
@@ -184,7 +184,7 @@ def test_return_leg_reverses_station_pair_and_uses_return_boarding_date():
         return httpx.Response(200, json=between_body("JP", "NDLS") if "/between/" in request.url.path else
                               timetable_body("12015", origin="JP", destination="NDLS") if not request.url.path.endswith("/fare") else fare_body())
     with httpx.Client(transport=httpx.MockTransport(handle), trust_env=False) as client:
-        adapter = RailRadarAdapter(RailRadarHttp("offline-rail-key", max_requests=3, http_client=client))
+        adapter = RailRadarAdapter(RailRadarHttp("offline-rail-key", max_requests=3, http_client=client), fare_mode="live")
         result = adapter.search_leg(preferences(), JP, NDLS, leg="return")
     assert calls[0].url.path.endswith("JP/NDLS") and calls[0].url.params["date"] == "2027-02-13"
     assert calls[-1].url.params["source"] == "JP" and calls[-1].url.params["destination"] == "NDLS"
@@ -202,7 +202,7 @@ def test_unsupported_class_or_missing_ordered_stops_never_requests_fare():
                 body = timetable_body(number, classes=["3A"] if fault == "classes" else ["CC"], origin="JP", destination="NDLS")
             return httpx.Response(200, json=body)
         with httpx.Client(transport=httpx.MockTransport(handle), trust_env=False) as client:
-            adapter = RailRadarAdapter(RailRadarHttp("offline-rail-key", max_requests=3, http_client=client))
+            adapter = RailRadarAdapter(RailRadarHttp("offline-rail-key", max_requests=3, http_client=client), fare_mode="live")
             adapter.search_leg(preferences(), NDLS, JP)
         assert len(calls) == 3 and not any(r.url.path.endswith("/fare") for r in calls) and not adapter.priced_offer_ids
 
@@ -247,7 +247,7 @@ def test_local_budget_and_returned_quota_headers_stop_before_another_request():
 
 def test_full_rail_probe_writes_input_pairs_partial_prices_and_share_archive(tmp_path):
     calls = []
-    settings = Settings(_env_file=None, railradar_api_key="offline-rail-key", data_dir=tmp_path)
+    settings = Settings(_env_file=None, railradar_api_key="offline-rail-key", train_fare_mode="live", data_dir=tmp_path)
     with httpx.Client(transport=httpx.MockTransport(handler_factory(calls)), trust_env=False) as client:
         code = check_rail.run_check(settings, preferences(),
             http_factory=lambda key, **kwargs: RailRadarHttp(key, http_client=client, **kwargs))
@@ -262,7 +262,7 @@ def test_full_rail_probe_writes_input_pairs_partial_prices_and_share_archive(tmp
 
 def test_fare_404_preserves_schedules_and_does_not_try_another_fare(tmp_path):
     calls = []
-    settings = Settings(_env_file=None, railradar_api_key="offline-rail-key", data_dir=tmp_path)
+    settings = Settings(_env_file=None, railradar_api_key="offline-rail-key", train_fare_mode="live", data_dir=tmp_path)
     with httpx.Client(transport=httpx.MockTransport(handler_factory(calls, fare_status=404)), trust_env=False) as client:
         code = check_rail.run_check(settings, preferences(),
             http_factory=lambda key, **kwargs: RailRadarHttp(key, http_client=client, **kwargs))
