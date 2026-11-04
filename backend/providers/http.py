@@ -10,7 +10,7 @@ from backend.llm import safe_provider_error
 
 class ProviderError(ValueError):
     def __init__(self, code, *, status=None, details=None):
-        super().__init__("SerpApi request failed: " + code)
+        super().__init__("Provider request failed: " + code)
         self.code, self.status, self.details = code, status, details or {}
 
     def public(self):

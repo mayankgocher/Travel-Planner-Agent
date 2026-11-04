@@ -132,6 +132,10 @@ class TransportOffer(DomainModel):
     source: Source
     recommendation_reason: str | None = None
     segments: list[FlightSegment] = Field(default_factory=list)
+    train_number: str | None = None
+    train_name: str | None = None
+    departure_station: str | None = None
+    arrival_station: str | None = None
 
     @model_validator(mode="after")
     def valid_journey(self):
@@ -168,3 +172,22 @@ class PlaceCandidate(DomainModel):
     address: str | None = None
     rating: Annotated[float, Field(ge=0, le=5)] | None = None
     possible_duplicate_ids: list[str] = Field(default_factory=list)
+
+
+class StationCandidate(DomainModel):
+    code: Annotated[str, Field(pattern=r"^[A-Z0-9]{1,10}$")]
+    name: Name
+    city: str | None = None
+    latitude: Annotated[float, Field(ge=-90, le=90)] | None = None
+    longitude: Annotated[float, Field(ge=-180, le=180)] | None = None
+    source: Source
+
+
+class TrainTimetable(DomainModel):
+    train_number: Annotated[str, Field(pattern=r"^[0-9]{5}$")]
+    train_name: Name
+    # These are coach classes operated by a train, not available seats.
+    operated_classes: list[Name] = Field(default_factory=list)
+    is_prs_bookable: bool | None = None
+    stop_codes: list[str] = Field(default_factory=list)
+    source: Source

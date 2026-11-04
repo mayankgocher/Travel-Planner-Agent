@@ -1,6 +1,6 @@
 # Progress and continuation
 
-Updated 3 November 2026. Checkpoint 07: flight adapter and source-quality fixes.
+Updated 3 November 2026. Checkpoint 08: RailRadar adapter and bounded check.
 
 ## Verified through checkpoint 05
 
@@ -81,33 +81,69 @@ Updated 3 November 2026. Checkpoint 07: flight adapter and source-quality fixes.
   scope were deliberately excluded from this adult-only one-way adapter check.
   These are offline replays, not fresh provider requests or new availability.
 - --category flights preview passed with zero calls. No dependency changes.
-- Checkpoint 07 Windows tests and new live flight retrieval remain pending.
+- User verified the flight live check on Windows: two HTTP 200 requests, 8
+  outbound and 7 return options. Reviewed share_results(20261103-173349).zip.
+  Inputs: DEL/JAI, 17/20 November 2026, two adults, Economy, sort 2, no cap.
+  Every retained option had a quote and passed the listing filters. Three records
+  were skipped; the older combined diagnostic cannot establish their exact causes.
+  Multi-passenger/tax/baggage/fee completeness remains unverified. The 142-test
+  Windows output was not provided; do not invent a test result from a live report.
+
+## Implemented in checkpoint 08
+
+- RailRadar HTTP boundary: fixed host and four endpoint shapes, Bearer header,
+  timeout, no redirects/retries, per-probe request budget, safe audit and numeric
+  quota headers. Stops before another request when reported remaining quota is zero.
+- Station candidates keep nullable city and source evidence. The outbound probe
+  explicitly selects NDLS/JP; general city/station choice is not implemented yet.
+- Train schedule parser preserves boarding-station dates and relative overnight
+  day differences; checks route/time/duration and supports five-digit train IDs.
+- Python shortlists at most two trains by duration/departure. Timetables confirm
+  operated coach classes and a unique ordered station pair before one fare query.
+  availableClasses never means vacant seats. Explicit class required for pricing.
+- Fare amounts and numeric components are retained without multiplying by adults
+  or inventing tax/passenger completeness. Basis remains unverified. General
+  RailRadar website links are source links, not verified booking/payment links.
+- scripts/check_rail.py previews by default. --live enables at most six requests:
+  two lookup, one between, up to two timetables, one fare. Default probe is CC,
+  two adults, GN, NDLS->JP, departure +14 days. No LLM/SerpApi/seat/PNR calls.
+- Unique reports save input parameters, station candidates, schedules, class/fare,
+  components, timestamps and quota/audit records. HTTP/provider failures stop;
+  completed schedule/detail evidence remains available. ZIP is created only once.
+- Flight skipped records now have safe specific codes/validated airport IDs,
+  never raw discarded data or exception strings. This cannot reconstruct the
+  three omitted records in the already-passed flight report; no repeat needed.
+- 178 offline tests passed on Linux Python 3.12.14. No fresh live travel-provider
+  calls were made in this environment. No dependency changes.
+- Offline saved-response replay: T02 20 schedules/no skips; T07 train 12952 classes
+  and 222 stop codes; T05 INR 3,165 preserved as an unverified quote with 12 numeric
+  components. Zero new quota consumption. check_rail.py preview passed, zero calls.
+- Rail fare docs URL redirects to the docs index; indexed official docs/pricing
+  and saved responses still describe the endpoint. Current access is unverified.
+  A failed fare call must preserve schedules and unknown prices, not fake data.
+- Checkpoint 08 Windows tests and the new bounded live rail check remain pending.
 
 ## Next actions
 
-1. Install checkpoint 07 preserving .env/venv; run 142 tests on Windows.
-2. With the existing local SERPAPI_API_KEY, run check_providers.py --live --category
-   flights once (at most two requests). Review share_results.zip. Do not repeat
-   hotel/Maps/Groq checks merely to install this checkpoint. Flight quote scope,
-   carrier/segment details, source links and unknown taxes need review.
-3. Implement RailRadar adapter and bounded check: station lookup -> Trains Between
-   -> Python shortlist -> fares -> optional timetable. Fare docs routing needs
-   rechecking; do not infer removal from a redirect. Availability stays unverified.
-4. Implement city-to-airport discovery/candidate selection and connect real
-   providers to agent retrieval callbacks/tool definitions. Derive hotel stay
-   dates from actual transport arrival/departure, including overnight legs.
-   Keep fixtures separate; never substitute them after a live provider failure.
-5. Add geographic validation and optional near-term Open-Meteo daily weather.
-   Missing/partial hours and unavailable future forecasts stay visible. Navigation
-   route-time verification and extra attraction-fee research are not promised.
-6. Add selection/lock compatibility, serialized trip updates, numbered view-only
+1. Install checkpoint 08, preserving .env/venv, and run 178 tests on Windows.
+2. User fills RAILRADAR_API_KEY locally using the existing key. Run check_rail.py
+   --live once, max six requests. Review share_results.zip, especially lookup,
+   current fare access, ordered stops, class and partial results/quota headers.
+   Do not repeat the passed Groq, hotel/Maps or flight live checks for this step.
+3. Implement general city-to-airport/station candidate selection and connect real
+   retrieval callbacks/tool definitions to agents. Clarify missing class/currency
+   before pricing. Preserve independent provider quotas and source uncertainty.
+   Derive hotel stay dates from actual arrival/departure, including overnight legs.
+4. Add optional near-term Open-Meteo daily weather and geographic relevance checks.
+   Missing hours and out-of-horizon forecasts stay unavailable, not invented.
+5. Add selection/lock compatibility, serialized trip updates, numbered view-only
    snapshots, stale-version rejection and last-successful-plan preservation.
-7. Add thin FastAPI, Streamlit, final Supervisor explanation and Markdown download.
-   Finish representative evaluations, live journeys and owner learning guide.
+6. Add thin FastAPI, Streamlit, final Supervisor explanation and Markdown download.
+   Finish representative evaluations, full live journeys and owner learning guide.
 
 ## Still pending in agreed scope
 
-Rail/weather adapters, airport resolution, graph live retrieval, LangChain tool-use integration,
+Weather, general location selection, graph live retrieval, LangChain tool-use integration,
 user selection controls/locks, durable application lifecycle, plan snapshots,
 FastAPI, Streamlit, export and systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.

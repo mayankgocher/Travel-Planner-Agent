@@ -1,7 +1,7 @@
 # API evidence and integration boundaries
 
 These findings summarize the earlier probe runs reviewed in this conversation.
-The application now has separate hotel/Maps/flight adapters; graph retrieval still uses
+The application now has separate hotel/Maps/flight/rail adapters; graph retrieval still uses
 synthetic data. Keys and raw private
 responses are excluded. Evidence is feasibility testing, not a reliability SLA.
 
@@ -92,7 +92,7 @@ successful scenario, not an accuracy score. Seat availability stays unverified.
 Hotel and Maps adapters now pass intercepted-HTTP tests; full suite 108 tests.
 No real provider calls were made in this build environment. The user subsequently
 ran the hotel/Maps check on Windows: PASS_CHECKS, exactly two HTTP 200 responses.
-Flight integration followed in checkpoint 07; RailRadar/weather adapters and
+Flight integration followed in checkpoint 07, rail in checkpoint 08; weather and
 LangChain tool-use integration remain pending.
 
 Current hotel documentation was checked during implementation:
@@ -149,4 +149,51 @@ booking fee completeness; multi-passenger coverage is kept unverified. Currency
 and passenger/date/route echo mismatches are rejected. Unknown prices stay null.
 Airport bindings are explicit; resolving arbitrary user cities is still pending.
 Connection airport timezones must be known; airport-change transfers are skipped.
-New flight retrieval is offline-tested only; real Windows verification is next.
+The user subsequently verified live flight retrieval on Windows; see below.
+
+## Reviewed checkpoint 07 live flight report
+
+Reviewed attachment: share_results(20261103-173349).zip.
+Request timestamps were 17:32:44 and 17:32:47 UTC
+on 3 November 2026. Two HTTP 200 responses, two adults, Economy, price sort, no cap.
+DEL to JAI on 17 November normalized 8 of 10 raw results; JAI to DEL on 20 November
+normalized 7 of 8. Every retained option had a known quote and passed the requested
+listing filters. Airlines, flight numbers, aware segment times and Google search
+URLs are present. Multi-passenger/tax/baggage/fee completeness remains unverified.
+
+Three records were skipped under a combined diagnostic; their precise causes
+cannot be inferred from the normalized ZIP. They could involve route/date/time
+validation or unresolved airport zones. Checkpoint 08 adds safe per-record codes
+and validated airport IDs, without storing raw discarded content. No new live
+flight request was needed to implement and test that reporting improvement.
+
+## Checkpoint 08 RailRadar contract
+
+Current primary references:
+https://railradar.in/docs/search-stations ;
+https://railradar.in/docs/trains-between-stations ;
+https://railradar.in/docs/get-train-details ;
+https://railradar.in/docs/authentication ;
+https://railradar.in/docs/rate-limits .
+The fare documentation URL https://railradar.in/docs/train-fare-calculator
+redirected to the docs index during review. Official indexed documentation and
+pricing still describe GET /v1/trains/{number}/fare; earlier saved T05/T06 quotes
+also succeeded. This does not establish current key access. The bounded live
+check must determine whether fares remain accessible; preserve schedules on errors.
+
+The adapter uses Bearer authentication in a header. Lookup accepts code/name
+candidates; the probe selects exact NDLS/JP codes explicitly. Date-filtered direct
+services use boarding-station dates, live=false/byCity=false. Coach classes and
+stop order are checked for at most two duration-shortlisted trains before a single
+General-quota fare query. No seat/PNR/live-running endpoint is called.
+
+The probe reports numeric quota headers and stops on reported zero availability
+or its own six-request budget, without waits/retries. Operated classes do not prove
+vacant seats. Fare response fields do not fully establish party/tax/payable scope;
+the amount stays unverified and is not multiplied by adults. Missing totals stay
+null. No full trip affordability claim can follow from the probe passing.
+
+Offline replay passed: T02 normalized 20 scheduled services, T07 normalized train
+12952 coach classes/stops, T05 preserved INR 3,165 as an unverified quote with 12
+numeric components. No fresh live API requests here. Station lookup/current fare
+access and new Windows execution remain pending. Full offline suite: 178 tests.

@@ -1,8 +1,8 @@
-# Checkpoint 07 walkthrough
+# Checkpoint 08 walkthrough
 
 Four LLM roles, graph orchestration and draft schedule/cost checks are implemented
-using synthetic graph retrieval. Separate real hotel/Maps/flight adapters are implemented;
-graph wiring, rail/weather, user selections/locks, plan versions and UI remain
+using synthetic graph retrieval. Separate hotel/Maps/flight/rail adapters are implemented;
+graph wiring, weather, general location selection, locks, plan versions and UI remain
 pending. Earlier sections describe foundation modules;
 the checkpoint 05 section below describes the current specialist path.
 
@@ -304,4 +304,46 @@ Distinct nearby museums/palaces are not merged just because they are close.
 The latest tests include actual intercepted HTTP parameter mapping, both leg
 directions, fare scope, segments, overnight dates, timezone errors, conservative
 caps, duplicate sources, bounded failure behavior and the live-report regressions.
-Automatic airport resolution, rail, weather and graph live retrieval remain next.
+Automatic airport resolution, weather and graph live retrieval remain pending;
+the next section describes the rail adapter added in checkpoint 08.
+
+## Checkpoint 08: follow the fixed rail sequence
+
+Read `scripts/check_rail.py` and `backend/providers/railradar.py` together. The
+script supplies explicit NDLS/JP station bindings and CC test class; these are
+not end-user defaults or an automatic metro resolver.
+
+1. `main()` previews by default. `--live` loads only the local RailRadar key.
+2. `RailRadarHttp` allows only the four planned endpoint shapes on a fixed host.
+   Authentication is a header, never a query argument. Requests have timeout and
+   no retries/redirects. The probe supplies max_requests=6. Numeric quota headers
+   can stop another call before it spends the remaining allowance.
+3. Two `stations()` calls normalize StationCandidate records. City can remain
+   null; the probe requires an exact selected code. General city ambiguity must
+   be handled by the later user selection/clarification flow.
+4. `search_leg()` checks bindings/dates/class/currency, retrieves dated direct
+   services, then normalizes TransportOffer records. `from.day=2` does not shift
+   the requested boarding date. `to.day-from.day` determines overnight arrival.
+   Invalid route/day/duration data is skipped, not corrected by guessing.
+5. Python sorts by actual duration then departure and takes at most two trains.
+   `timetable()` constructs TrainTimetable with operated coach classes and stop
+   codes. These do not indicate available seats. Details are needed before fare
+   lookup here to avoid asking for an unsupported class or reversed station pair.
+6. The first confirmed class/route receives one fare request, General quota GN.
+   `apply_fare()` preserves the returned amount and numeric components, attaches
+   explicit unknown-scope notes, and does not multiply by adults or invent taxes.
+   Earlier scheduled records are not mutated. All other services stay unpriced.
+7. An HTTP/parse/provider error stops subsequent requests. `last_result`, details
+   and audit retain completed evidence, so the script can report partial results.
+   It saves input/response summaries and a train table, then creates the share ZIP
+   once. No raw bodies, authentication headers or model reasoning are stored.
+
+`check_rail.py` makes no Groq/SerpApi/seat/PNR requests. The output is retrieval
+verification, not an itinerary. The graph's synthetic four-role path is unchanged.
+Return leg reversal/date handling is tested offline; this probe is outbound only.
+The latest suite has 178 tests. Existing dependencies and venv are unchanged.
+
+The flight report contained three generic skips. `FlightRecordError` now provides
+fixed reason codes and validated airport IDs in SearchResult.skipped_records;
+unexpected exception strings remain hidden. This improves future diagnostics
+without new API calls or pretending the older omitted records can be recovered.

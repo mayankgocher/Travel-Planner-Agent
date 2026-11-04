@@ -1,14 +1,15 @@
 # Multi-agent travel planner
 
-Checkpoint 07 — flight retrieval and live-report quality fixes, 3 November 2026.
+Checkpoint 08 — RailRadar retrieval and bounded live check, 3 November 2026.
 
 **This is not yet a complete travel application.** The Supervisor, Transportation,
 Hotel and Itinerary LLM roles are connected through LangGraph. Their existing
 four-role check still uses explicitly synthetic fixture data. Separate real
 SerpApi hotel and Maps adapters passed a real retrieval check on Windows. Separate
-flight retrieval is now implemented and tested offline. Real providers are not
-wired into the graph yet. Rail/weather adapters, airport resolution, UI, selection
-locks, numbered versions and export remain pending. There are 142 offline tests.
+flight retrieval also passed its real two-direction check on Windows. The rail
+adapter is now implemented and offline-tested. Real providers are not wired into
+the graph yet. Weather, general location selection, UI, locks, numbered versions
+and export remain pending. There are 178 offline tests.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
@@ -21,9 +22,12 @@ Groq requests including one itinerary repair, 6,845 reported tokens, synthetic
 INR 20,100 subtotal and no unresolved validation errors. This does not establish
 live travel accuracy. The user then verified the hotel/Maps live check: two HTTP
 200 responses, 18 hotels (14 matching all filters), 20 places. Occupancy, room
-type, taxes and unreturned weekday hours remain unverified. Checkpoint 07 has
-142 passing offline tests on Linux Python 3.12.14; Windows tests and its new
-flight retrieval check remain pending. Dependencies are unchanged.
+type, taxes and unreturned weekday hours remain unverified. The flight live check
+then returned 8 outbound and 7 return options in two HTTP 200 requests. Three
+records were skipped; their precise reasons were not captured in that older
+report. Checkpoint 08 adds safe specific skip diagnostics. Its 178 offline tests
+pass on Linux Python 3.12.14; Windows tests and new rail retrieval remain pending.
+Dependencies are unchanged.
 
 ## Read first
 
@@ -62,9 +66,9 @@ or Streamlit app launch command exists yet.
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.
 
-If you already installed checkpoint 06 successfully, keep the existing venv:
+If you already installed checkpoint 07 successfully, keep the existing venv:
 dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
-`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 07.
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 08.
 Tests use temporary fixture keys and do not load your real .env. No live API
 calls occur. The demo uses in-memory checkpoints only; a test separately verifies
 SQLite persistence across graph rebuilds. Demo results are not travel offers.
@@ -160,6 +164,9 @@ keep unknown evidence explicit; the graph's synthetic fixtures are unchanged.
 
 ## New: outbound and return flight retrieval check
 
+This live check has now passed on Windows. No repeat is needed for checkpoint 08.
+The commands remain available for diagnosis; the default next check is rail.
+
 Use the existing local SERPAPI_API_KEY. Do not recreate the venv or rerun the
 already-passed hotel/Maps/Groq checks for this step.
 
@@ -200,6 +207,55 @@ claimed as checkout/payment URLs. Nearby likely stepwell aliases are flagged;
 the itinerary validator prevents scheduling both and keeps their hours unverified.
 This heuristic does not automatically merge nearby distinct attractions. Partial
 weekday schedules now have an explicit missing-hours warning.
+
+## New: outbound rail retrieval check
+
+After offline tests pass, fill `RAILRADAR_API_KEY` in the project's local `.env`
+using your existing RailRadar key. Preserve the other entries. No key belongs in
+chat. No dependency installation or venv recreation is needed.
+
+```powershell
+.\venv\Scripts\python.exe scripts\check_rail.py
+.\venv\Scripts\python.exe scripts\check_rail.py --live
+```
+
+Preview makes zero calls. Live makes **at most six RailRadar requests**, outbound
+Delhi NDLS to Jaipur JP only: two exact-code station lookups, one Trains Between,
+up to two shortlisted train timetables, and at most one fare. It stops on HTTP/
+provider errors, an exhausted reported quota or the local request budget. There
+are no automatic retries, sleeps, seat/PNR/live-running requests, Groq or SerpApi
+calls. Each live rerun makes fresh requests; this is not a duplicate-aware ledger.
+
+The fixed probe requests two adults, General quota GN, class CC (Chair Car),
+departure 14 days after execution. `--date YYYY-MM-DD` and `--class-code 3A` can
+override the test inputs. These are not default end-user preferences. The return
+date in the preferences is unused by this outbound-only probe; return rail is
+covered offline but not yet live-tested. The station choices are explicit probe
+bindings, not automatic city/metro resolution. Class must be clarified before a
+fare search in the later full application; it will not silently choose CC.
+
+Python sorts the schedule shortlist by duration then departure. Timetables are
+needed here to confirm operated coach classes and ordered stops before fetching
+a fare. `availableClasses` means coach classes, not vacant seats. A train that
+does not confirm the requested class is skipped; at most one more is inspected.
+Remaining services stay unpriced. No usable quote yields REVIEW_REQUIRED, rather
+than scanning every service or pretending the journey is free.
+
+The parser preserves boarding-station dates and overnight day differences. It
+supports standard five-digit train identifiers. Rail prices remain INR; missing
+totals stay null. Fare components such as GST are retained, but traveler scope,
+tax completeness and all payable charges remain unverified. Amounts are not
+multiplied by adults. A passing probe does not establish complete affordability.
+Source URLs point to RailRadar's general website, not a verified booking page.
+
+Read `data/reports/rail_<unique run>/report.html`: preferences, station candidates,
+scheduled trains, quote/class, timetables, numeric fare components, quota headers
+and exact request inputs. A failed fare request preserves retrieved schedules.
+Only HTML/JSON go into `share_results.zip`; share that ZIP. No keys, raw response
+bodies, private reasoning or authorization headers are saved. The fare docs URL
+currently redirects, while earlier saved fare responses succeeded; this explicit
+live check is needed to establish current endpoint access. Do not infer a missing
+fare as zero, or switch providers silently.
 
 Add keys locally only when live integration testing begins. Never paste them in
 chat, commit `.env`, or upload a project ZIP containing populated credentials.

@@ -17,6 +17,14 @@ from backend.schemas import FlightSegment, PriceQuote, Source, TransportOffer
 CLASSES = {"economy": 1, "premium economy": 2, "business": 3, "first": 4}
 
 
+class FlightRecordError(ValueError):
+    """Fixed diagnostic codes only; never raw provider values or exception text."""
+    def __init__(self, code, airport=None):
+        super().__init__(code)
+        self.code = code
+        self.airport = airport if isinstance(airport, str) and re.fullmatch(r"[A-Z]{3}", airport) else None
+
+
 @dataclass(frozen=True)
 class AirportLocation:
     code: str
@@ -32,12 +40,12 @@ class AirportLocation:
 def segment_time(airport, zones):
     code = airport["id"]
     if code not in zones:
-        raise ValueError("Unresolved airport timezone")
+        raise FlightRecordError("unknown_airport_timezone", code)
     local = datetime.strptime(airport["time"], "%Y-%m-%d %H:%M")
     zone = ZoneInfo(zones[code])
     first, second = local.replace(tzinfo=zone, fold=0), local.replace(tzinfo=zone, fold=1)
     if first.utcoffset() != second.utcoffset() or first.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None) != local:
-        raise ValueError("Ambiguous or nonexistent local flight time")
+        raise FlightRecordError("Ambiguous or nonexistent local flight time")
     return first
 
 
@@ -57,18 +65,19 @@ def parse_flights(response, p, origin, destination, journey_date, currency, airp
     collections = [body.get("best_flights", []), body.get("other_flights", [])]
     if any(not isinstance(rows, list) for rows in collections):
         raise ProviderError("invalid_flight_results_shape", status=200)
-    offers, warnings, seen = [], [], set()
+    offers, warnings, seen, skipped = [], [], set(), []
     for index, item in enumerate(collections[0] + collections[1]):
         if not isinstance(item, dict):
             warnings.append(f"Skipped malformed flight record at index {index}.")
+            skipped.append({"index": index, "reason": "invalid_record_shape"})
             continue
         try:
             # A round-trip amount can never be reused as a one-way fare.
             if item.get("type") is not None and item["type"].casefold().replace("-", " ") != "one way":
-                raise ValueError("Not a one-way quote")
+                raise FlightRecordError("not_a_one_way_quote")
             raw_segments = item["flights"]
             if not isinstance(raw_segments, list) or not raw_segments:
-                raise ValueError("Missing segments")
+                raise FlightRecordError("missing_segments")
             segments = []
             for segment in raw_segments:
                 dep, arr = segment["departure_airport"], segment["arrival_airport"]
@@ -76,12 +85,12 @@ def parse_flights(response, p, origin, destination, journey_date, currency, airp
                     departure=segment_time(dep, zones), arrival=segment_time(arr, zones),
                     flight_number=segment.get("flight_number"), airline=segment.get("airline"), travel_class=segment.get("travel_class")))
             if segments[0].departure_airport != origin.code or segments[-1].arrival_airport != destination.code:
-                raise ValueError("Wrong airport route")
+                raise FlightRecordError("airport_route_mismatch")
             if segments[0].departure.date() != journey_date:
-                raise ValueError("Wrong departure date")
+                raise FlightRecordError("departure_date_mismatch")
             for previous, following in zip(segments, segments[1:]):
                 if previous.arrival_airport != following.departure_airport or following.departure < previous.arrival:
-                    raise ValueError("Unsupported airport transfer or inconsistent segment order")
+                    raise FlightRecordError("airport_transfer_or_segment_order")
             classes = {s.travel_class for s in segments}
             travel_class = segments[0].travel_class if len(classes) == 1 else "Mixed cabin"
             amount = money(item.get("price"))
@@ -104,14 +113,19 @@ def parse_flights(response, p, origin, destination, journey_date, currency, airp
                 source=Source(provider="serpapi_google_flights", fetched_at=response.fetched_at,
                     provider_data_at=provider_time(body), source_id=id, url=url))
             offers.append(offer); seen.add(id)
-        except (ValidationError, ValueError, KeyError, TypeError, AttributeError):
-            warnings.append(f"Skipped flight record at index {index}: invalid route/date/segments or unresolved airport timezone.")
+        except (ValidationError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            reason = exc.code if isinstance(exc, FlightRecordError) else "invalid_segment_fields"
+            record = {"index": index, "reason": reason}
+            if isinstance(exc, FlightRecordError) and exc.airport:
+                record["airport"] = exc.airport
+            skipped.append(record)
+            warnings.append(f"Skipped flight record at index {index}: {reason}.")
     if not scope_matches:
         warnings.append("Flight search scope was not fully echoed; fare basis remains unverified.")
     if offers:
         warnings.append("Quoted flight prices are not confirmed payable totals; seat availability is unverified.")
     return SearchResult(offers, warnings, {"top_level_keys": list(body),
-        "best_flight_count": len(collections[0]), "other_flight_count": len(collections[1])})
+        "best_flight_count": len(collections[0]), "other_flight_count": len(collections[1])}, skipped_records=skipped)
 
 
 class FlightAdapter:

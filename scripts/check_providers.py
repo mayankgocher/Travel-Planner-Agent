@@ -110,7 +110,8 @@ def run_check(settings, p, categories, *, http_factory=SerpApiHttp, flight_airpo
                         raise ValueError("Unknown category or missing explicit airport bindings")
                     case.update(outcome="DATA_RETURNED" if result.items else "EMPTY_RESULT",
                         normalized_count=len(result.items), warnings=result.warnings,
-                        response_shape=result.response_shape, items=[item.model_dump(mode="json") for item in result.items])
+                        response_shape=result.response_shape, skipped_records=result.skipped_records,
+                        items=[item.model_dump(mode="json") for item in result.items])
                     if category == "hotels":
                         eligible = eligible_hotels(result.items, p)
                         case["eligible_hotel_ids"] = [item.id for item in eligible]

@@ -1,5 +1,5 @@
 """Normalize hotel/place responses; unknown evidence remains unknown."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 import hashlib
@@ -19,6 +19,7 @@ class SearchResult:
     items: list
     warnings: list[str]
     response_shape: dict
+    skipped_records: list[dict] = field(default_factory=list)
 
 
 def money(value):

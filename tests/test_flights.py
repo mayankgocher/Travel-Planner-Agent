@@ -229,3 +229,14 @@ def test_single_adult_quote_still_does_not_invent_included_taxes():
     p = preferences(adults=1)
     flight = parse_flights(response(body), p, DEL, JAI, p.departure_date, "INR").items[0]
     assert flight.price.covers_all_travelers and not flight.price.complete
+
+
+def test_skipped_flight_reports_safe_specific_reason_and_airport_code():
+    body = flight_body(); body["best_flights"][0]["flights"][0]["arrival_airport"]["id"] = "XYZ"
+    result = parse_flights(response(body), preferences(), DEL, JAI, preferences().departure_date, "INR")
+    assert result.skipped_records == [{"index": 0, "reason": "unknown_airport_timezone", "airport": "XYZ"}]
+    body["best_flights"][0]["flights"][0]["arrival_airport"]["id"] = "JAI"
+    body["best_flights"][0]["flights"][0]["departure_airport"]["time"] = "malformed offline-key"
+    result = parse_flights(response(body), preferences(), DEL, JAI, preferences().departure_date, "INR")
+    assert result.skipped_records == [{"index": 0, "reason": "invalid_segment_fields"}]
+    assert "offline-key" not in str(result)

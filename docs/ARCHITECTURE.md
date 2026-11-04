@@ -1,7 +1,7 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 07 retains four LLM roles using explicitly synthetic graph
-retrieval and separate real hotel/Maps/flight adapters with a bounded live checker.
+Status: Checkpoint 08 retains four LLM roles using explicitly synthetic graph
+retrieval and separate hotel/Maps/flight/rail adapters with bounded live checkers.
 The diagram remains the product blueprint: provider-to-graph integration, other
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
@@ -135,7 +135,8 @@ saved product version or booking.
 Checkpoint 06 implements providers/http.py and providers/serpapi.py for hotel and
 Maps retrieval, plus scripts/check_providers.py and tests/test_providers.py.
 Checkpoint 07 adds providers/flights.py, services/place_aliases.py and
-tests/test_flights.py. Rail/weather providers and server/UI/version/export modules
+tests/test_flights.py. Checkpoint 08 adds providers/rail_http.py and railradar.py,
+scripts/check_rail.py and tests/test_rail.py. Weather and server/UI/version/export modules
 remain planned. Lock compatibility with changed offers
 and graph enforcement remain pending; the primitive only detects replacement,
 removal and unlock attempts. No agent files are presented as working stubs.
@@ -225,3 +226,37 @@ Place alias detection requires coordinates within 40 m plus matching normalized
 names or stepwell/kund synonyms. It flags possible duplicates without merging
 them. Schedules cannot include both flagged candidates; their hours stay unverified.
 This narrow heuristic is not a general geographic entity-resolution system.
+
+## Checkpoint 08 rail boundary
+
+No extra agent or graph node is introduced. RailRadarAdapter exposes station
+lookup and a readable search_leg: dated services -> Python duration shortlist ->
+Timetable for required coach-class/ordered-stop checks -> one fare. StationBinding
+contains a selected code and display city. The probe explicitly checks NDLS and
+JP lookup matches first; selecting among general city candidates remains pending.
+Timetable may precede fares when needed to avoid requesting an unsupported class.
+
+The probe's two station lookups plus one leg need at most six requests: schedules,
+two train details maximum and one fare maximum. HTTP uses a fixed host, Bearer
+header, timeout, zero redirects/retries, endpoint allowlist, redacted audit and
+numeric quota headers. Returned zero remaining quota stops before the next call.
+This six-request budget belongs to the probe, not Groq account limits. Application
+request budgets remain explicit and must respect independent provider quotas.
+
+Scheduled TransportOffer records carry train name/number and station codes. Dates
+are at the boarding station; arrival uses destination-day minus boarding-day.
+The parser does not add the train-origin day offset or filter runDays against the
+wrong date. Unknown/mismatched times/durations/route records are skipped. Standard
+five-digit train identifiers are supported initially. Return direction is tested
+offline but not yet by this single-leg live probe.
+
+Operated coach classes do not verify seat availability. Fare totals are retained
+as unverified quotes, with numeric breakdown and request parameters. No passenger
+count multiplication or tax-completeness claim is made. Errors leave completed
+scheduled results in the report, never fixture replacements. General RailRadar
+source URLs are not checkout links. Real provider graph wiring remains pending.
+
+Flight normalization now returns safe skipped-record codes and known airport IDs;
+exception text and raw discarded records are not saved. This improves future
+diagnostics; it cannot reconstruct the three records omitted in the reviewed live
+flight report. No repeat of successful flights is required for the rail checkpoint.
