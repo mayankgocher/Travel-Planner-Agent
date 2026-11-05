@@ -1,10 +1,12 @@
-"""Readable orchestration tested with injected, explicitly synthetic workers.
+"""Readable orchestration with injected workers and optional live intake rules.
 
 An optional Supervisor turns natural language into validated preference updates.
-Specialists are injected functions or LLM agent objects; live travel adapters
-are not integrated yet in checkpoint 05.
+Specialists may be fixture workers or real agents. runtime.py supplies the
+provider-backed composition; graph state never contains provider credentials.
 """
 from collections.abc import Callable
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
@@ -17,6 +19,7 @@ from backend.schemas import HotelOffer, TransportOffer, TripPreferences
 from backend.services.costs import summarize_costs
 from backend.services.replanning import affected_components
 from backend.services.offer_filters import transport_leg
+from backend.services.hotel_dates import stay_preferences
 
 TransportWorker = Callable[[TripPreferences], list[TransportOffer]]
 HotelWorker = Callable[[TripPreferences], list[HotelOffer]]
@@ -82,7 +85,8 @@ def dispatch(state: TripState) -> str:
 
 def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
                    itinerary_worker: ItineraryWorker, checkpointer,
-                   supervisor_worker: Callable[[str, TripPreferences], SupervisorTurn] | None = None):
+                   supervisor_worker: Callable[[str, TripPreferences], SupervisorTurn] | None = None,
+                   *, destination_timezone="Asia/Kolkata", require_search_preferences=False):
     """Workers do the task; this graph enforces the sequence and state updates.
 
     The caller owns the checkpointer's lifetime. No in-memory fallback silently
@@ -123,10 +127,25 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
     def after_supervisor(state: TripState) -> str:
         return END if state.get("supervisor_failed") or state.get("message_only") else "prepare"
 
+    def prepare_step(state):
+        updates = prepare(state)
+        if require_search_preferences and not updates.get("input_error"):
+            p = TripPreferences.model_validate(updates["preferences"])
+            extra = [field for field in ("transport_mode", "currency") if getattr(p, field) is None]
+            if p.transport_mode in ("train", "compare") and not p.train_class:
+                extra.append("train_class")
+            if p.departure_date and p.departure_date < datetime.now(ZoneInfo(destination_timezone)).date():
+                extra.append("departure_date")
+                updates["input_error"] = "Please provide a departure date that is not in the past."
+            updates["missing_fields"] += extra
+            if updates["missing_fields"]:
+                updates["status"] = "needs_input"
+        return updates
+
     def model_failure(state, role, exc, worker):
         return {"model_failed": True, "specialist_error": {"role": role, "http_status": exc.http_status,
                     "details": exc.provider_error, "message": str(exc)},
-                "warnings": state.get("warnings", []) + [str(exc)],
+                "warnings": state.get("warnings", []) + list(getattr(worker, "warnings", [])) + [str(exc)],
                 "agent_usage": state.get("agent_usage", {}) | {role: {
                     key: getattr(worker, "usage", {}).get(key, 0) + (exc.model_usage or {}).get(key, 0)
                     for key in set(getattr(worker, "usage", {})) | set(exc.model_usage or {})}},
@@ -136,21 +155,39 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
         try:
             offers = transport_worker(TripPreferences.model_validate(state["preferences"]))
             data = [TransportOffer.model_validate(o).model_dump(mode="json") for o in offers]
-            warnings = [] if data else ["No transport offers returned."]
+            warnings = list(getattr(transport_worker, "warnings", [])) + ([] if data else ["No transport offers returned."])
         except ModelCallError as exc:
             return model_failure(state, "transport", exc, transport_worker) | {"transport": []}
         except (ValueError, OSError, TimeoutError):
             data, warnings = [], ["Transport step failed; no replacement offers were invented."]
-        return {"transport": data, "pending": [p for p in state["pending"] if p != "transport"],
+        pending = [p for p in state["pending"] if p != "transport"]
+        extra = {}
+        if state.get("hotels") and data:
+            try:
+                stay = stay_preferences(TripPreferences.model_validate(state["preferences"]), data, destination_timezone)
+                incompatible = any(h["check_in"] != stay.departure_date.isoformat() or h["check_out"] != stay.return_date.isoformat() for h in state["hotels"])
+            except ValueError:
+                incompatible = True
+            if incompatible:
+                extra = {"hotels": [], "itinerary": None, "costs": None,
+                         "invalidated": sorted(set(state.get("invalidated", [])) | {"hotels", "itinerary", "costs"})}
+                pending = ["hotels", "itinerary"]
+                warnings.append("Changed transport requires different hotel dates; refreshing the stay.")
+        return {**extra, "transport": data, "pending": pending,
                 "agent_usage": state.get("agent_usage", {}) | {"transport": getattr(transport_worker, "usage", {})},
                 "warnings": state.get("warnings", []) + warnings,
                 "trace": state["trace"] + ["Transport step completed."]}
 
     def hotels(state: TripState) -> dict:
         try:
-            offers = hotel_worker(TripPreferences.model_validate(state["preferences"]))
+            p = TripPreferences.model_validate(state["preferences"])
+            stay = stay_preferences(p, state.get("transport", []), destination_timezone)
+            offers = hotel_worker(stay)
             data = [HotelOffer.model_validate(o).model_dump(mode="json") for o in offers]
-            warnings = [] if data else ["No hotel offers returned."]
+            warnings = list(getattr(hotel_worker, "warnings", [])) + ([] if data else ["No hotel offers returned."])
+            legs = {transport_leg(TransportOffer.model_validate(o), p) for o in state.get("transport", [])}
+            if not {"outbound_transport", "return_transport"}.issubset(legs):
+                warnings.append("Hotel search uses requested trip dates because transport coverage is incomplete.")
         except ModelCallError as exc:
             return model_failure(state, "hotels", exc, hotel_worker) | {"hotels": []}
         except (ValueError, OSError, TimeoutError):
@@ -216,7 +253,7 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
 
     builder = StateGraph(TripState)
     builder.add_node("supervisor", supervise)
-    builder.add_node("prepare", prepare)
+    builder.add_node("prepare", prepare_step)
     builder.add_node("clarify", clarify)
     builder.add_node("transport", transport)
     builder.add_node("hotels", hotels)

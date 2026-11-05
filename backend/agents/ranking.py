@@ -9,6 +9,14 @@ class OfferRanking(BaseModel):
     reason: str
 
 
+def ranking_candidate(offer):
+    """Keep decision fields; URLs/long provenance notes stay in the actual offer."""
+    data = offer.model_dump(mode="json", exclude={"source", "recommendation_reason"})
+    data["price"].pop("notes", None)
+    data["synthetic"] = offer.source.synthetic
+    return data
+
+
 def apply_ranking(ranking: OfferRanking, offers: list) -> list:
     known = {offer.id: offer for offer in offers}
     if len(known) != len(offers):

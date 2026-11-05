@@ -1,15 +1,14 @@
 # Multi-agent travel planner
 
-Checkpoint 09 — deterministic assumed train fares, 4 November 2026.
+Checkpoint 10 — connected provider-backed four-agent workflow, 4 November 2026.
 
-**This is not yet a complete travel application.** The Supervisor, Transportation,
-Hotel and Itinerary LLM roles are connected through LangGraph. Their existing
-four-role check still uses explicitly synthetic fixture data. Separate real
-SerpApi hotel and Maps adapters passed a real retrieval check on Windows. Separate
-flight retrieval also passed its real two-direction check on Windows. The rail
-adapter is now implemented and offline-tested. Real providers are not wired into
-the graph yet. Weather, general location selection, UI, locks, numbered versions
-and export remain pending. There are 209 offline tests. Mock train pricing is explicit; real fare access is still paid.
+**This is not yet a complete travel application.** The same four agents can now
+run with real provider adapters through validated LangChain tools and LangGraph.
+The connected probe uses explicit Delhi/Jaipur station/airport bindings. General
+location selection, weather, FastAPI/Streamlit, locks, product versions and export
+remain pending. Train prices default to labelled deterministic assumptions; real
+rail fare access is still restricted. There are 221 offline tests. The older
+check_agents.py deliberately retains its fully synthetic travel retrieval.
 
 Target: Python **3.12.7**, Windows, project root
 `D:\Projects\GenAI\Agentic AI\Travel Planning Agent`. The user verified checkpoint
@@ -28,8 +27,11 @@ records were skipped; their precise reasons were not captured in that older
 report. The rail live check then passed lookup/schedules/class checks but its fare
 request returned HTTP 403 PLAN_UPGRADE_REQUIRED (86 monthly requests remained).
 The user approved deterministic assumed fares for the interview demo. Checkpoint
-09 has 209 passing offline tests on Linux Python 3.12.14; Windows verification
-remains pending. Saved real schedules/classes and assumed prices are labelled separately.
+09 passed all 209 tests on Windows and its zero-network replay passed: train
+12015 CC had the assumed INR 618/adult / INR 1,236 for two; 12958 had no CC fare.
+Checkpoint 10 has 221 passing offline tests on Linux Python 3.12.14. Its new
+Windows/connected-live verification remains pending. Source and assumed-price
+labels are preserved; no real API calls were made in this build environment.
 Dependencies are unchanged.
 
 ## Read first
@@ -69,9 +71,9 @@ or Streamlit app launch command exists yet.
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.
 
-If you already installed checkpoint 08 successfully, keep the existing venv:
+If you already installed checkpoint 09 successfully, keep the existing venv:
 dependencies are unchanged. Run `venv\Scripts\python.exe -m pytest -q` and
-`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 09.
+`venv\Scripts\python.exe scripts\demo_workflow.py` after applying checkpoint 10.
 Tests use temporary fixture keys and do not load your real .env. No live API
 calls occur. The demo uses in-memory checkpoints only; a test separately verifies
 SQLite persistence across graph rebuilds. Demo results are not travel offers.
@@ -283,7 +285,71 @@ requests, one fare). It is retained for future paid access; do not rerun it with
 this restricted key. Failures preserve confirmed class and schedule evidence, keep
 price unknown and never switch to mock. Return direction has offline coverage;
 the fresh probe remains outbound only. Existing four-role check_agents.py still
-uses synthetic retrieval. Providers are not wired into the graph yet.
+uses synthetic retrieval. The connected provider-backed graph is described below.
+
+## New: connected four-agent live check
+
+After offline tests pass, use the existing local GROQ_API_KEY, SERPAPI_API_KEY and
+RAILRADAR_API_KEY. No new account or dependency is needed. Keep the existing venv.
+The earlier replay/individual provider/Groq checks do not need repeating.
+
+```powershell
+.\venv\Scripts\python.exe scripts\check_connected.py
+.\venv\Scripts\python.exe scripts\check_connected.py --live
+```
+
+Preview is zero-network and loads no keys. **The --live command makes real API
+calls.** Default probe: Delhi to Jaipur, leaving +14 days, returning three days
+later, two adults, train CC, exactly 3-star hotel, INR 2,000–4,000/night, guest
+rating >=4.2, INR 25,000 budget, history interests and relaxed pace. Dates can be
+set with --departure YYYY-MM-DD. These are explicit test inputs, not silent
+end-user defaults.
+
+Limits per execution: up to FIVE Groq calls (four roles plus one itinerary
+correction), FOUR SerpApi calls, and SIX RailRadar calls in mock fare mode. The
+train probe normally needs only TWO SerpApi searches (hotel + Maps). Rail performs
+separate outbound/return schedule searches and up to two timetables per leg; no
+paid fare endpoint in mock mode. There are no automatic HTTP retries, quota waits,
+booking/payment/seat/PNR calls or fabricated schedule/place fallback.
+
+--transport-mode flight or compare is available for explicit separate tests;
+flights use up to two SerpApi searches, leaving two for hotels/Maps. Only the first
+four normalized flight options per leg enter ranking. --fare-mode live explicitly
+requests paid RailRadar pricing (up to EIGHT rail calls); do not use it with the
+restricted key. The probe explicitly defaults to mock regardless of an old .env
+fare setting. Each live rerun spends fresh requests; no duplicate-aware cache.
+
+The Supervisor extracts preferences, Python clarifies missing mode/currency/class,
+Transportation retrieves and ranks, Hotel searches the derived stay dates and
+ranks, and Itinerary organizes real place candidates. Python validates IDs,
+classes, dates, known hours, buffers and costs. Tools are invoked by the graph's
+Python callbacks, not by an autonomous model tool loop. Native structured replies
+remain separate from tool execution.
+
+Hotel check-in comes from the ranked outbound arrival date in the destination
+zone; checkout comes from the ranked return departure date. Original user trip
+dates stay unchanged. A transport replan that changes the stay invalidates held
+hotels and refreshes them; compatible hotels and places remain retained. Missing
+transport coverage leaves requested-date hotel quotes explicitly unconfirmed.
+
+Station/airport selections are deliberately explicit here (NDLS/JP, DEL/JAI,
+Asia/Kolkata), not an arbitrary city resolver. Mismatched bindings do not silently
+search a different destination. Authentication/quota/network failures stop further
+calls to that provider in the run; independent supported alternatives can continue
+when compare was requested. No separate search cache is introduced.
+
+Read data/reports/connected_<run>/report.html and share only share_results.zip.
+It contains workflow outputs, matching request parameters, provider errors,
+assumption labels, token counters and checks. Keys, raw model responses/private
+reasoning and authorization headers are excluded. Reports save after graph nodes;
+the share ZIP is created once. Hosted tool/model tracing is disabled for this path.
+
+PASS_CONNECTED_CHECKS means the tested four-role draft has grounded sources and
+no remaining timing errors. It does not prove worldwide coverage, verified payable
+prices or full application readiness. Unknown hotel/flight passenger/tax scope
+continues to make actual affordability unknown. Assumed fares are excluded from
+verified totals; illustrative comparisons also require complete remaining scope.
+Warnings and unknown totals are expected when evidence is incomplete.
 
 ## Planned product
 

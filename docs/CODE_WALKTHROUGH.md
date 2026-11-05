@@ -1,8 +1,9 @@
-# Checkpoint 09 walkthrough
+# Checkpoint 10 walkthrough
 
 Four LLM roles, graph orchestration and draft schedule/cost checks are implemented
-using synthetic graph retrieval. Separate hotel/Maps/flight/rail adapters are implemented;
-graph wiring, weather, general location selection, locks, plan versions and UI remain
+using synthetic fixtures or the provider-backed composition. Hotel/Maps/flight/rail
+adapters connect through validated tools. Weather, general location selection,
+locks, plan versions and UI remain
 pending. Earlier sections describe foundation modules;
 the checkpoint 05 section below describes the current specialist path.
 
@@ -304,7 +305,7 @@ Distinct nearby museums/palaces are not merged just because they are close.
 The latest tests include actual intercepted HTTP parameter mapping, both leg
 directions, fare scope, segments, overnight dates, timezone errors, conservative
 caps, duplicate sources, bounded failure behavior and the live-report regressions.
-Automatic airport resolution, weather and graph live retrieval remain pending;
+At checkpoint 07, airport resolution, weather and graph live retrieval were pending;
 the next section describes the rail adapter added in checkpoint 08.
 
 ## Checkpoint 08: follow the fixed rail sequence
@@ -380,3 +381,42 @@ The suite now has 209 tests. They cover unseen combinations and all class ranges
 cross-process/hash-seed stability, evidence guards, adult multiplication, mode
 separation, zero-network replay and a four-agent draft with explicit assumed-price
 warnings and unknown real affordability. No new framework or dependency was added.
+
+## Checkpoint 10: follow the connected path
+
+Start with runtime.py: the factory gets a model, checkpointer and provider session,
+creates three validated LangChain tools and injects their invoke callbacks into
+the same four agents. Tool/model hosted tracing is disabled. The model returns
+structured preferences/rankings/schedules; Python chooses which tool runs next.
+This is not autonomous endpoint discovery or a ReAct loop.
+
+Read providers/session.py next. JourneyBindings records explicit location choices.
+The probe supplies Delhi/Jaipur codes and timezone; arbitrary city resolution is
+still pending. Clients are lazy and the session is scoped to one execution. It
+holds audits/error gates, not a separate search cache. Rebuild it for a new graph
+execution while retaining the trip checkpointer to resume/replan.
+
+Transport retrieves each leg. Mock train mode uses real timetable-checked classes
+and assumed prices; flight hard filters precede a four-option per-leg shortlist.
+Provider warnings remain attached through shared SearchResult values, unpacked by
+the agents. Auth/quota/network/server failures block later calls to that provider.
+Compare can still use the other provider. No synthetic offers replace failed data.
+
+services/hotel_dates.py derives stay dates from ranked arrival and return departure
+in the destination timezone. Graph hotel execution receives those dates without
+overwriting user trip dates. A later transport change refreshes incompatible held
+hotels; compatible places stay in state. Itinerary validates actual hotel coverage.
+Missing live mode/currency/class or a past date triggers clarification before search.
+
+check_connected.py streams graph-node updates into a sanitized report, saving safe
+request inputs and available token counters. It previews without settings/keys;
+--live performs real model/travel calls. Default train/mock uses at most 5 Groq,
+4 SerpApi and 6 RailRadar calls (normally 2 SerpApi). No paid /fare in mock mode.
+The old check_agents.py intentionally remains a synthetic-travel integration check.
+
+tests/test_connected.py intercepts actual ChatGroq/httpx payloads and blocks sockets.
+It covers all four roles for train/flight/compare, explicit tools, error stops,
+overnight stay derivation, refreshing incompatible hotels, retained places, missing
+preferences, unknown real affordability and safe reports. Full suite: 221 tests.
+New Windows/live verification remains pending; UI, weather, locks and snapshots
+are not implemented by this checkpoint.

@@ -1,6 +1,6 @@
 # Progress and continuation
 
-Updated 4 November 2026. Checkpoint 09: approved deterministic mock train pricing.
+Updated 4 November 2026. Checkpoint 10: provider-backed four-agent composition.
 
 ## Verified through checkpoint 05
 
@@ -160,29 +160,63 @@ Updated 4 November 2026. Checkpoint 09: approved deterministic mock train pricin
   supported class ranges, restart/hash-seed stability, scope/route guards, party
   math, no paid endpoint in mock mode, live failure without fallback, report replay
   and four-agent illustrative cost disclosure. No dependency changes/live calls.
-- Windows tests and the new zero-network replay remain pending user verification.
+- User verified all 209 tests on Windows (14.94s), then PASS_DEMO_CHECKS with zero
+  calls/keys loaded. Reviewed share_results(20261104-150038).zip: 12015 CC INR
+  618/adult, 1,236/two; 12958 unsupported CC remains unpriced. Original provider
+  timestamps retained. Assumptions remain explicit and no real budget claim made.
+
+## Implemented in checkpoint 10
+
+- runtime.build_provider_workflow composes the same four LLM roles with existing
+  SerpApi/RailRadar adapters using validated StructuredTool invoke callbacks.
+  Retrieval sequence is Python-owned, not autonomous model tool selection. Native
+  strict structured replies stay separate from tool calls; hosted tracing is off.
+- TravelProviderSession owns lazy clients, per-execution budgets and safe failure
+  gates. Explicit JourneyBindings supplied by the Delhi/Jaipur probe. General city/
+  airport/station selection remains pending. No fixture fallback or separate cache.
+- Train/flight/compare modes retrieve outbound and return legs independently.
+  Mock train mode never calls /fare. First four normalized flight options per leg
+  enter ranking; supplied price provenance is retained. Scope/completeness rules
+  are unchanged; actual affordability cannot be inferred from assumed prices.
+- SearchResult is a shared boundary, preserving provider warnings through agents
+  into graph results. Auth/quota/network/server errors stop further calls to that
+  provider; compare can continue with the independent provider. Completed train
+  schedule/class evidence survives a later fare failure.
+- Real-provider intake clarifies missing mode/currency and train class when needed,
+  and rejects past departure dates before search. Legacy fixture graphs retain
+  their original simpler intake contract.
+- Hotel stay dates derive from ranked transport arrival/return departure in the
+  destination zone. Original trip preferences are preserved. Transport changes
+  that invalidate held hotel dates trigger hotel refresh; compatible places remain.
+- Compact LLM candidate payloads omit long source URLs/provenance notes, while
+  complete evidence remains in returned normalized offers/reports.
+- scripts/check_connected.py previews without keys/calls. Explicit --live starts
+  <=5 Groq, <=4 SerpApi, <=6 rail calls for mock fares (<=8 only explicit live fare).
+  Default train probe typically uses 2 SerpApi queries. No seats/PNR/payments/retries.
+- 221 offline tests passed on Linux Python 3.12.14. Intercepted-HTTP tests exercise
+  all four real agent classes and actual provider parsers/tool wrappers for train,
+  flight and compare; overnight stays, hotel invalidation, source/assumption labels,
+  clarification, provider stops/partial alternatives and sanitized report/usage.
+- Preview passed with zero calls. No real Groq/travel API requests were made here.
+  No dependency changes. Windows and connected live verification remain pending.
 
 ## Next actions
 
-1. Install checkpoint 09 preserving .env/venv; run 209 tests on Windows.
-2. Run check_rail.py --replay-report against the already-saved rail report. Zero
-   quota consumption and no keys needed. Review the new HTML/share_results.zip.
-   Do not rerun the blocked paid fare check or other already-passed live probes.
-3. Connect real provider retrieval callbacks/tool definitions and general city/
-   airport/station candidate selection. Propagate price provenance/notices through
-   every result, final explanation, UI, snapshot and Markdown export. Do not claim
-   actual affordability from illustrative values. Clarify missing class/currency.
-4. Derive hotel dates from actual transport arrival/departure (including overnight)
-   and add optional daily Open-Meteo weather/geographic checks. Unknown scope stays
-   visible. Missing or out-of-horizon forecasts are unavailable, not invented.
-5. Add selection/locks, serialized trip updates, numbered view-only snapshots,
-   stale-version rejection and last-successful-plan preservation.
-6. Add thin FastAPI/Streamlit, final explanation/Markdown download, representative
-   evaluations/full user journeys and owner learning guide.
+1. Install checkpoint 10 preserving .env/venv and run 221 tests on Windows.
+2. With existing local Groq/SerpApi/RailRadar keys, run check_connected.py --live
+   once (default train/mock). This is a real API run with explicit request bounds.
+   Review share_results.zip. Unknown payable totals are expected; no blind reruns.
+3. Add general location candidate discovery/selection and optional daily weather,
+   retaining ambiguity and out-of-horizon warnings. The fixed probe is not general
+   city coverage. Keep verified schedule and assumed price provenance separate.
+4. Add selection/locks, serialized trip lifecycle, numbered view-only snapshots,
+   stale-update rejection and last-successful-plan preservation.
+5. Add thin FastAPI/Streamlit, final Supervisor explanation, Markdown download,
+   representative evaluations/full live user journeys and owner learning guide.
 
 ## Still pending in agreed scope
 
-Weather, general location selection, graph live retrieval, LangChain tool-use integration,
+Weather, general location selection,
 user selection controls/locks, durable application lifecycle, plan snapshots,
 FastAPI, Streamlit, export and systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.

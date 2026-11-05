@@ -221,6 +221,22 @@ timestamps and real schedule metadata were preserved. This is historical evidenc
 replay, not fresh availability. Independent synthetic hashing example 13240 /
 NDLS / JP / 3A gives INR 897 per adult; no route/class validity follows from it.
 
-Checkpoint 09 has 209 passing offline tests on Linux Python 3.12.14, including
-restart stability and four-role disclosure/illustrative cost behavior. No fresh
-travel-provider calls were made. Windows verification/replay remain pending.
+Checkpoint 09 had 209 passing offline tests on Linux Python 3.12.14. The user
+verified all 209 on Windows and its saved-report replay passed, with zero calls.
+Reviewed share_results(20261104-150038).zip preserves original source timestamps
+and clearly marks INR 618/adult / 1,236/two as assumed for 12015 CC; no CC price
+was added to 12958. This is not a fresh fare or availability observation.
+
+## Checkpoint 10 integration boundary
+
+Actual provider adapter/parser code now runs through four agent classes and the
+graph via LangChain tool wrappers. All 221 offline tests pass; full intercepted
+HTTP cases cover train, flight and compare, both directions, overnight hotel
+dates and source/error/assumption propagation. These are invented response
+payloads over MockTransport, not new live-provider evidence or an accuracy score.
+
+The new connected live probe has explicit DEL/JAI and NDLS/JP bindings, no general
+city resolver. It requests train/mock by default and never calls paid rail fares.
+Unverified room/passenger/tax scope still prevents actual affordability claims.
+Provider request budgets are independent of model quota. No fresh API calls were
+made during this build; new Windows/connected-live verification is pending.

@@ -1,10 +1,10 @@
 # Agreed architecture — implementation blueprint
 
-Status: Checkpoint 09 retains four LLM roles using explicitly synthetic graph
-retrieval and separate hotel/Maps/flight/rail adapters with bounded live checkers.
+Status: Checkpoint 10 connects the four LLM roles to provider-backed retrieval
+through validated LangChain tools, with explicit selected location bindings.
 Train pricing now has an explicitly approved deterministic mock mode. Schedule
-and price provenance are separate; graph live retrieval/UI remain pending.
-The diagram remains the product blueprint: provider-to-graph integration, other
+and price provenance are separate. General location selection/UI remain pending.
+The diagram remains the product blueprint: general location selection, weather,
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
 
@@ -256,7 +256,8 @@ Operated coach classes do not verify seat availability. Fare totals are retained
 as unverified quotes, with numeric breakdown and request parameters. No passenger
 count multiplication or tax-completeness claim is made. Errors leave completed
 scheduled results in the report, never fixture replacements. General RailRadar
-source URLs are not checkout links. Real provider graph wiring remains pending.
+source URLs are not checkout links. Graph wiring was pending at checkpoint 08;
+checkpoint 10 below adds the provider-backed composition.
 
 Flight normalization now returns safe skipped-record codes and known airport IDs;
 exception text and raw discarded records are not saved. This improves future
@@ -294,3 +295,34 @@ Illustrative full-trip comparison needs all other required prices to have comple
 comparable scope; other unknown occupancy/taxes/currency still prevent a full
 decision. Agent prompts and graph warnings must preserve these distinctions.
 Future UI, versions and export must display ASSUMED DEMO FARE prominently.
+
+## Checkpoint 10 connected execution
+
+runtime.py composes four agents with the existing graph. TravelProviderSession
+owns lazy provider clients and explicit JourneyBindings, three StructuredTool
+wrappers, safe audits and provider failure gates. Python calls tool.invoke with
+TripPreferences; the model does not autonomously choose endpoints. There is no
+tools-plus-native-schema request. Full normalized source evidence stays in state;
+ranking/scheduling messages omit long source URLs/notes to reduce prompt size.
+
+The new script verifies an explicit Delhi/Jaipur route. General location selection
+is not implemented and no autocomplete is silently accepted. Runtime intake asks
+for mode/currency/class as required before spending provider calls. The per-run
+session is not a cache: rebuild it for a new execution while reusing trip checkpoints.
+
+Transport calls independent outbound/return legs, with two timetable-checked train
+candidates or four normalized flight candidates per leg. Comparison can use the
+healthy provider after the other fails. Auth/quota/network/server errors block more
+calls to that provider during the run. No synthetic schedules/places are substituted.
+Provider warnings survive tool/agent boundaries and enter the graph warnings.
+
+Hotels use ranked transport arrival and return departure dates in the destination
+zone. A changed stay invalidates incompatible held hotels. Original user dates
+are preserved. Missing transport leaves requested-date quotes with an uncertainty
+warning; impossible overnight coverage cannot produce a valid itinerary.
+
+check_connected.py explicitly enables a bounded full run: <=5 Groq, <=4 SerpApi,
+<=6 RailRadar in mock fare mode (<=8 only if live fares explicitly requested).
+Default train run expects only 2 SerpApi queries. Reports persist after graph-node
+updates and retain safe request inputs, usage and evidence. No booking/seat/PNR
+or weather call occurs. General locations, UI and product plan versions are pending.

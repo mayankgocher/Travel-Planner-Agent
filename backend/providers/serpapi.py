@@ -1,5 +1,4 @@
 """Normalize hotel/place responses; unknown evidence remains unknown."""
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 import hashlib
@@ -12,14 +11,7 @@ from pydantic import ValidationError
 from backend.providers.http import ProviderError
 from backend.schemas import HotelOffer, PlaceCandidate, PriceQuote, Source
 from backend.services.place_aliases import possible_alias_pairs
-
-
-@dataclass
-class SearchResult:
-    items: list
-    warnings: list[str]
-    response_shape: dict
-    skipped_records: list[dict] = field(default_factory=list)
+from backend.providers.results import SearchResult
 
 
 def money(value):

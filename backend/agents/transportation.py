@@ -2,23 +2,27 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from backend.agents.ranking import OfferRanking, apply_ranking
+from backend.agents.ranking import OfferRanking, apply_ranking, ranking_candidate
 from backend.llm import invoke_structured
 from backend.schemas import TripPreferences
 from backend.services.offer_filters import eligible_transport, transport_leg
+from backend.providers.results import unpack_search
 
 
 class TransportationAgent:
     def __init__(self, model, search):
         self.model, self.search = model, search
         self.usage = {}
+        self.warnings = []
 
     def __call__(self, p: TripPreferences):
         self.usage = {}
-        offers = eligible_transport(self.search(p), p)
+        self.warnings = []
+        items, self.warnings = unpack_search(self.search(p))
+        offers = eligible_transport(items, p)
         if not offers:
             return []
-        candidates = [o.model_dump(mode="json") | {"leg": transport_leg(o, p)} for o in offers]
+        candidates = [ranking_candidate(o) | {"leg": transport_leg(o, p)} for o in offers]
         result = invoke_structured(self.model, OfferRanking, [
             SystemMessage(content="You are the Transportation Agent. Rank all supplied eligible IDs exactly once. "
                 "Compare mode, local departure/arrival, duration, stated budget and preferences. When train/flight "

@@ -6,6 +6,8 @@ from backend.llm import invoke_structured
 from backend.schemas import HotelOffer, PlaceCandidate, TransportOffer, TripPreferences
 from backend.services.offer_filters import transport_leg
 from backend.services.scheduling import Schedule, validate_schedule
+from backend.providers.results import unpack_search
+from backend.services.hotel_dates import stay_preferences
 
 
 class ItineraryAgent:
@@ -23,14 +25,20 @@ class ItineraryAgent:
         if not outward or not returning or not hotels:
             return {"plan_status": "needs_review", "activities": [], "validation_errors": ["Complete transport legs and a hotel recommendation are required for scheduling."], "warnings": []}
         hotel = hotels[0]
+        stay = stay_preferences(p, transport, self.timezone)
+        if hotel.check_in != stay.departure_date or hotel.check_out != stay.return_date or hotel.adults != p.adults:
+            return {"plan_status": "needs_review", "activities": [], "validation_errors": ["Recommended hotel does not cover the transport-derived stay."], "warnings": []}
         retained = state.get("places")
-        places = ([PlaceCandidate.model_validate(o) for o in retained]
-                  if retained and "places" not in state.get("invalidated", []) else self.search_places(p))
+        search_warnings = []
+        if retained and "places" not in state.get("invalidated", []):
+            places = [PlaceCandidate.model_validate(o) for o in retained]
+        else:
+            places, search_warnings = unpack_search(self.search_places(p))
         if not places or len({o.id for o in places}) != len(places):
-            return {"plan_status": "needs_review", "activities": [], "validation_errors": ["Unique place candidates are required."], "warnings": []}
+            return {"plan_status": "needs_review", "activities": [], "validation_errors": ["Unique place candidates are required."], "warnings": search_warnings}
         context = {"preferences": p.model_dump(mode="json"), "timezone": self.timezone,
                    "arrival": outward.arrival.isoformat(), "return_departure": returning.departure.isoformat(),
-                   "places": [o.model_dump(mode="json") for o in places]}
+                   "places": [o.model_dump(mode="json", exclude={"source", "address"}) | {"synthetic": o.source.synthetic} for o in places]}
         messages = [SystemMessage(content="You are the Itinerary Agent. Build a draft using only supplied place IDs. "
             "Choose suitable places for the user's interests and pace. Use YYYY-MM-DD and HH:MM in the supplied "
             "destination timezone. Respect opening windows (weekday Monday=0), 60 minutes after arrival/before "
@@ -46,6 +54,7 @@ class ItineraryAgent:
             self.usage = {key: self.usage.get(key, 0) + value for key, value in result.usage.items()}
             schedule = Schedule.model_validate(result.parsed)
             errors, warnings = validate_schedule(schedule, places, outward, returning, p, self.timezone)
+            warnings = search_warnings + warnings
             if not errors or attempt == 1:
                 break
             messages.append(HumanMessage(content="Correct this draft once. Preserve the supplied offers/place IDs. "

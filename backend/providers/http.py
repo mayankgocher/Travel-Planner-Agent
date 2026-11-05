@@ -24,13 +24,14 @@ class JsonResponse:
 
 
 class SerpApiHttp:
-    def __init__(self, key, *, http_client=None):
+    def __init__(self, key, *, http_client=None, max_requests=None):
         if not key.strip():
             raise ValueError("Add SERPAPI_API_KEY locally")
         self._key = key
         self._owns_client = http_client is None
         self._client = http_client if http_client is not None else httpx.Client()
         self.audit = []
+        self.max_requests = max_requests
 
     def __enter__(self):
         return self
@@ -40,6 +41,8 @@ class SerpApiHttp:
             self._client.close()
 
     def get(self, params):
+        if self.max_requests is not None and len(self.audit) >= self.max_requests:
+            raise ProviderError("serpapi_request_budget_reached")
         if any(k.casefold() in ("api_key", "apikey", "authorization", "password") for k in params):
             raise ValueError("Credentials are configured separately from query parameters")
         public_params = {k: v.replace(self._key, "[REDACTED]") if isinstance(v, str) else v for k, v in params.items()}
