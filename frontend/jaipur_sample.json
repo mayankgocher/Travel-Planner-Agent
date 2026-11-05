@@ -1,0 +1,230 @@
+{
+  "snapshot_date": "2026-11-05",
+  "trip": {
+    "origin": "Delhi",
+    "destination": "Jaipur",
+    "departure_date": "2026-11-19",
+    "return_date": "2026-11-22",
+    "adults": 2,
+    "budget_total": "25000",
+    "currency": "INR"
+  },
+  "transport": [
+    {
+      "direction": "Outbound",
+      "train_number": "12015",
+      "train_name": "New Delhi - Daurai Shatabdi Express",
+      "departure": "2026-11-19T06:10:00+05:30",
+      "arrival": "2026-11-19T10:40:00+05:30",
+      "departure_station": "NDLS",
+      "arrival_station": "JP",
+      "travel_class": "CC",
+      "seat_availability": "unverified",
+      "price": {
+        "amount": "1236",
+        "currency": "INR",
+        "basis": "whole_leg",
+        "pricing_mode": "demo",
+        "per_adult_amount": "618",
+        "demo_rule_version": "sha256-class-v1",
+        "covers_all_travelers": true,
+        "taxes_included": null
+      },
+      "source": {
+        "provider": "railradar",
+        "fetched_at": "2026-11-05T15:01:02.313221Z",
+        "source_id": "train:12015:NDLS:JP:2026-11-19",
+        "url": "https://railradar.in/"
+      }
+    },
+    {
+      "direction": "Return",
+      "train_number": "12016",
+      "train_name": "Daurai - New Delhi Shatabdi Express",
+      "departure": "2026-11-22T17:35:00+05:30",
+      "arrival": "2026-11-22T22:30:00+05:30",
+      "departure_station": "JP",
+      "arrival_station": "NDLS",
+      "travel_class": "CC",
+      "seat_availability": "unverified",
+      "price": {
+        "amount": "1086",
+        "currency": "INR",
+        "basis": "whole_leg",
+        "pricing_mode": "demo",
+        "per_adult_amount": "543",
+        "demo_rule_version": "sha256-class-v1",
+        "covers_all_travelers": true,
+        "taxes_included": null
+      },
+      "source": {
+        "provider": "railradar",
+        "fetched_at": "2026-11-05T15:01:04.553133Z",
+        "source_id": "train:12016:JP:NDLS:2026-11-22",
+        "url": "https://railradar.in/"
+      }
+    }
+  ],
+  "hotel": {
+    "name": "Indie Stays Jaipur",
+    "check_in": "2026-11-19",
+    "check_out": "2026-11-22",
+    "hotel_class": 3,
+    "guest_rating": 4.8,
+    "nightly_price": "2529",
+    "price": {
+      "amount": "7588",
+      "currency": "INR",
+      "basis": "whole_stay",
+      "pricing_mode": "live",
+      "per_adult_amount": null,
+      "demo_rule_version": null,
+      "covers_all_travelers": false,
+      "taxes_included": null
+    },
+    "source": {
+      "provider": "serpapi_google_hotels",
+      "fetched_at": "2026-11-05T15:01:06.279112Z",
+      "source_id": "hotel:ChkI0e6R04LwmNo3Gg0vZy8xMXN2bTliNWhuEAE",
+      "url": "https://www.indiestays.in///sanganer-jaipur/"
+    }
+  },
+  "costs": {
+    "budget_status": "unknown",
+    "complete_subtotal": null,
+    "excluded_costs": [
+      "attractions",
+      "food",
+      "local_transport"
+    ]
+  },
+  "days": [
+    {
+      "date": "2026-11-19",
+      "activities": [
+        {
+          "start": "11:45",
+          "end": "12:45",
+          "name": "Hawa Mahal",
+          "hours_unverified": false,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJpQvTG0uxbTkRDLLMHlNdDoY",
+            "url": "https://obms-tourist.rajasthan.gov.in/place-details/Hawa-mahal"
+          }
+        },
+        {
+          "start": "13:15",
+          "end": "14:15",
+          "name": "The City Palace",
+          "hours_unverified": false,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJwbAghgu0bTkRYHt9ATEVgEQ",
+            "url": "https://royaljaipur.in/"
+          }
+        },
+        {
+          "start": "14:45",
+          "end": "15:45",
+          "name": "Jantar Mantar",
+          "hours_unverified": false,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJaXD1f0yxbTkRvquNoSkESuk",
+            "url": "https://www.tourism.rajasthan.gov.in/jantar-mantar.html"
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20",
+      "activities": [
+        {
+          "start": "09:15",
+          "end": "11:15",
+          "name": "Amber Palace",
+          "hours_unverified": true,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJ-w3Sy1qwbTkRK34UR2ffIWI",
+            "url": "https://www.tourism.rajasthan.gov.in/amber-palace.html"
+          }
+        },
+        {
+          "start": "12:00",
+          "end": "13:30",
+          "name": "Jaigarh Fort",
+          "hours_unverified": true,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJx0lfsbGxbTkRgVOhxJ7EGbw",
+            "url": "https://royaljaipur.in/index.php/plan-your-visit/jaigarh/"
+          }
+        },
+        {
+          "start": "15:00",
+          "end": "16:30",
+          "name": "Nahargarh Fort",
+          "hours_unverified": true,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJ0fNH81yxbTkRi56uF-amqgo",
+            "url": "https://www.tourism.rajasthan.gov.in/nahargarh-fort.html"
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "activities": [
+        {
+          "start": "10:00",
+          "end": "11:30",
+          "name": "Albert Hall Museum",
+          "hours_unverified": true,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJXyn5OrC2bTkRaGk8EzNDuwU",
+            "url": "https://obms-tourist.rajasthan.gov.in/place-details/Government-Central-Museum-Albert-Hall-Jaipur"
+          }
+        },
+        {
+          "start": "12:30",
+          "end": "13:30",
+          "name": "Sisodia Rani ka Bagh",
+          "hours_unverified": true,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJkzbjKhm3bTkRNiCT5-dA6vU",
+            "url": "http://museumsrajasthan.gov.in/museums.htm"
+          }
+        },
+        {
+          "start": "14:30",
+          "end": "15:30",
+          "name": "Amrapali Museum",
+          "hours_unverified": true,
+          "source": {
+            "provider": "serpapi_google_maps",
+            "fetched_at": "2026-11-05T15:01:08.277894Z",
+            "source_id": "place:ChIJSTr0NwG0bTkRFSj6wltYcPY",
+            "url": "http://www.amrapalimuseum.com/"
+          }
+        }
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "activities": []
+    }
+  ]
+}

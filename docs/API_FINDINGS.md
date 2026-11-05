@@ -290,3 +290,15 @@ called. Short aliases alone did not prevent the validation failure.
 The hotel fix rejects the ranking and continues with existing eligible hotel
 records in a local order. Offline intercepted responses exercised all three
 invalid-list shapes. The new ranking path still awaits live verification.
+
+## Successful resumed run used for the saved screen
+
+Reviewed `share_results(20261105-150907).zip`, produced by the user's Windows
+continuation `connected_20261105_150730_535229_15a673`. All connected checks
+passed. The original run had completed train/hotel recommendations and Maps
+retrieval before the Itinerary rate limit. The continuation retained those saved
+records: zero SerpApi and RailRadar requests, 6,883 reported Groq tokens, one
+schedule correction and no remaining timing violations. Nine activities were
+scheduled, six with unverified opening hours. The generated weekday note was
+inconsistent with the schedule and is omitted from the sample screen. The hotel
+quote remains incomplete and the assumed train fares cannot establish budget fit.

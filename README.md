@@ -1,13 +1,13 @@
 # Multi-agent travel planner
 
-Checkpoint 10 hotel ranking fix — connected provider-backed four-agent workflow, 5 November 2026.
+Checkpoint 11 — offline Streamlit demo of the saved Jaipur trip, 5 November 2026.
 
 **This is not yet a complete travel application.** The same four agents can now
 run with real provider adapters through validated LangChain tools and LangGraph.
-The connected probe uses explicit Delhi/Jaipur station/airport bindings. General
-location selection, weather, FastAPI/Streamlit, locks, product versions and export
-remain pending. Train prices default to labelled deterministic assumptions; real
-rail fare access is still restricted. There are 240 offline tests. The older
+The connected probe uses explicit Delhi/Jaipur station/airport bindings. The local
+Streamlit demo shows a saved result. Live planning from the screen, general location
+selection, weather, locks, product versions and export remain pending. Train prices
+default to labelled deterministic assumptions; real rail fare access is still restricted. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
 Target: Python **3.12.7**, Windows, project root
@@ -34,10 +34,27 @@ run completed retrieval but Groq rate-limited Itinerary (details and recovery be
 The user ran the recovery revision after enabling UTF-8 mode on Windows. All
 seven travel requests succeeded, but the Hotel Agent's ranking still failed ID
 validation. This fix preserves eligible hotels and continues with a local order
-when that happens. The fix passes 240 offline tests on Linux Python 3.12.14;
-Windows and live verification of the fix remain pending. Source and assumed-price
-labels are preserved; no real API calls were made in this build environment.
+when that happens. The final Windows run completed hotel ranking and was resumed
+successfully after a Groq rate-limit error at Itinerary; it did not need another
+travel-provider request. Checkpoint 11 uses that saved result. It does not refresh
+any quotes, schedules or hours.
 Dependencies are unchanged.
+
+## Open the saved-trip demo
+
+Install Checkpoint 11 with `INSTALL_CHECKPOINT_11.ps1` from an extracted staging
+folder. It keeps your existing `.env`, venv and reports. From the project root:
+
+```powershell
+.\venv\Scripts\python.exe -m streamlit run .\frontend\app.py --server.address 127.0.0.1 --browser.gatherUsageStats false
+```
+
+Open `http://127.0.0.1:8501` and click **Load sample trip**. The page reads a bundled
+JSON snapshot and needs no keys or FastAPI server. It shows saved train schedules,
+demo rail fares, the hotel quote, and nine activities with their structured warnings.
+The free-text weekday note from the original report is omitted. Source links can be
+opened manually; loading the sample sends no provider requests. No live rerun is
+required for this step. Stop Streamlit with Ctrl+C.
 
 ## Read first
 
@@ -70,8 +87,8 @@ existing venv without checking its version first. Activation is optional; using
 the venv's Python directly avoids PowerShell activation-policy problems.
 
 The environment check sends **no network requests** and does not read API keys.
-It prints package versions and verifies a tiny LangGraph can execute. No server
-or Streamlit app launch command exists yet.
+It prints package versions and verifies a tiny LangGraph can execute. The offline
+Streamlit launch command is above; FastAPI is not needed for this checkpoint.
 
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.

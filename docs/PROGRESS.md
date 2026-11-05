@@ -252,28 +252,44 @@ Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Iti
   duplicate and unknown IDs and verify itinerary completion with hard filters,
   warnings, usage and request bounds preserved. No live API calls were made here.
 
+## Checkpoint 11: saved-trip app
+
+- The user's resumed 5 November Jaipur run passed the connected checks. It reused
+  saved trains, hotel options and places, with zero new travel-provider calls.
+- `frontend/app.py` is a local Streamlit screen with a **Load sample trip** button.
+  `frontend/jaipur_sample.json` is a display-only projection of the successful
+  report: two train legs, one hotel, nine activities, and six opening-hours warnings.
+  It retains quote labels and source timestamps and omits model notes, prompts,
+  raw responses and API credentials. Historical quotes and availability are not
+  refreshed; the ₹25,000 budget fit remains unknown.
+- Custom sorting stays out of scope. Existing agents, filters, ranking, dependencies
+  and provider behavior are byte-for-byte unchanged from Checkpoint 10 Hotel Fix.
+- Verified on Linux Python 3.12.14 with pinned Streamlit 1.66.1: 241 offline
+  tests passed (5.34 seconds). The new test loads the actual Streamlit screen and
+  clicks the sample button with socket connections blocked. The local CLI launch
+  returned HTTP 200 from Streamlit's loopback health endpoint. No new model or
+  travel-provider requests were made. Windows UI launch remains to be checked.
+
 ## Next actions
 
-1. Install the checkpoint 10 hotel fix ZIP preserving .env/venv; run 240 offline
-   tests on Windows. No pip install or new key is needed.
-2. Keep effective GROQ_MODEL=openai/gpt-oss-120b. Run one fresh
-   check_connected.py --live --fare-mode mock and review the report. Do not use
-   --resume-report on the failed Hotel Agent run. Unknown payable totals remain
-   expected. User reported upgraded limits of 250,000 TPM / 1,000 RPM; no Groq
-   rate-limit error was reported by the latest run.
+1. Install the checkpoint 11 ZIP preserving .env/venv. Launch the Streamlit screen
+   with the README command and click **Load sample trip**. No new key, pip install,
+   FastAPI server or live probe is needed.
+2. Add a thin FastAPI planning endpoint and connect a Streamlit **Generate plan**
+   action to the existing workflow. Keep the saved sample path for offline demos.
 3. Add general location candidate discovery/selection and optional daily weather,
    retaining ambiguity and out-of-horizon warnings. The fixed probe is not general
    city coverage. Keep verified schedule and assumed price provenance separate.
 4. Add selection/locks, serialized trip lifecycle, numbered view-only snapshots,
    stale-update rejection and last-successful-plan preservation.
-5. Add thin FastAPI/Streamlit, final Supervisor explanation, Markdown download,
+5. Add final Supervisor explanation, Markdown download,
    representative evaluations/full live user journeys and owner learning guide.
 
 ## Still pending in agreed scope
 
 Weather, general location selection,
 user selection controls/locks, durable application lifecycle, plan snapshots,
-FastAPI, Streamlit, export and systematic evaluation. Graph checkpoints are not
+FastAPI, live Streamlit planning, export and systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.
 
 ## Preserve decisions

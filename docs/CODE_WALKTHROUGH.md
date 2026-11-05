@@ -460,3 +460,14 @@ currency, then higher guest rating and stable ID. A warning explains the change.
 There is no second model call or search; the graph continues to Itinerary as
 usual. Valid model rankings still work unchanged. Quoted nightly prices do not
 establish occupancy, taxes, final totals or booking status.
+
+## Checkpoint 11: follow the saved-trip screen
+
+Start at `frontend/app.py`. **Load sample trip** sets one Streamlit session flag.
+`main()` reads `jaipur_sample.json` as UTF-8. Three display functions show trains,
+hotel and itinerary. The sample contains selected offers and scheduled activities
+from the successful continuation, excluding prompts, raw responses and model
+notes. Activity warnings were matched to the place IDs in the saved report.
+No backend agent, FastAPI server or API credentials are involved in this path.
+`tests/test_sample_trip_app.py` clicks the real button in Streamlit's test runner
+with socket connections blocked and checks the trip and warning labels.

@@ -3,7 +3,8 @@
 Status: Checkpoint 10 connects the four LLM roles to provider-backed retrieval
 through validated LangChain tools, with explicit selected location bindings.
 Train pricing now has an explicitly approved deterministic mock mode. Schedule
-and price provenance are separate. General location selection/UI remain pending.
+and price provenance are separate. Checkpoint 11 adds the saved-trip Streamlit
+screen. Live UI planning and general location selection remain pending.
 The recovery revision adds failed-Itinerary resumption without new agents,
 database layers, retry loops or changes to the product scope.
 The diagram remains the product blueprint: general location selection, weather,
@@ -362,3 +363,12 @@ price, higher guest rating, then stable ID. Unknown and incomparable prices sort
 after comparable quotes. A report warning records the local sort. This requires
 no retry, leaves provider/model request failures on their existing paths and
 does not relax filters or price completeness checks.
+
+## Checkpoint 11: offline Streamlit screen
+
+`frontend/app.py` reads the bundled `frontend/jaipur_sample.json` on demand. The
+snapshot contains only selected itinerary and offer display data, plus retained
+source and price evidence. The screen displays known times and flags unverified
+hours, seats, room costs and budget fit. No provider or graph clients are imported.
+The app omits the original free-text model notes. No change to filters or ranking.
+The next app checkpoint can reuse the layout with a response from FastAPI.
