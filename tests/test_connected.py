@@ -18,6 +18,7 @@ from backend.runtime import build_provider_workflow
 from backend.schemas import TripPreferences
 from backend.services.hotel_dates import stay_preferences
 from scripts import check_connected
+from scripts.connected_recovery import load_itinerary_resume
 
 P = dict(origin="Delhi", destination="Jaipur", departure_date="2027-02-10", return_date="2027-02-13",
     adults=2, transport_mode="train", train_class="CC", currency="INR", hotel_class=3, nightly_min="2000",
@@ -234,3 +235,173 @@ def test_flight_class_filters_run_before_the_four_option_shortlist():
         services, _ = setup(config(), client)
         result = services.transport(TripPreferences(**(P | {"transport_mode": "flight", "flight_class": "Business"})))
     assert len(result.items) == 2 and all(o.travel_class == "Business" for o in result.items)
+
+
+def itinerary_rate_limit(base):
+    def handler(request):
+        if request.url.host == "api.groq.com":
+            name = json.loads(request.content)["response_format"]["json_schema"]["name"]
+            if name == "Schedule":
+                base.calls.append(request); base.roles.append(name)
+                return httpx.Response(429, json={"error": {"message": "Test TPM limit groq-secret", "code": "rate_limit_exceeded"}})
+        return base(request)
+    return handler
+
+
+def saved_failed_itinerary(tmp_path):
+    base = Responses(); settings = config(tmp_path)
+    with httpx.Client(transport=httpx.MockTransport(itinerary_rate_limit(base)), trust_env=False) as client:
+        services, model = setup(settings, client)
+        code = check_connected.run_check(settings, "Offline test", model=model, providers=services)
+    path = next((tmp_path / "reports").glob("*/report.json"))
+    assert code == 2 and len(services.audit()["serpapi"]) == 2
+    return path, json.loads(path.read_text())
+
+
+def test_rate_limit_preserves_successful_places_and_does_not_automatically_retry(tmp_path):
+    path, report = saved_failed_itinerary(tmp_path)
+    state = report["workflow"]
+    assert state["status"] == "partial_results" and state["specialist_error"]["http_status"] == 429
+    assert state["places"][0]["id"] == "place:test-museum" and len(state["transport"]) == 2 and state["hotels"]
+    assert report["reported_total_tokens"] == 600 and state["agent_usage"]["itinerary"] == {}
+    assert "groq-secret" not in path.read_text()
+
+
+@pytest.mark.parametrize("old_report_without_places", [False, True])
+def test_resume_executes_only_itinerary_and_separates_old_usage(tmp_path, old_report_without_places):
+    path, original = saved_failed_itinerary(tmp_path)
+    if old_report_without_places:
+        original["workflow"]["places"] = []
+        path.write_text(json.dumps(original), encoding="utf-8")
+    original_bytes = path.read_bytes()
+    # Exercise both accepted forms: JSON and the generated ZIP.
+    source = path if old_report_without_places else path.parent / "share_results.zip"
+    resume_data = load_itinerary_resume(source)
+    handler = Responses(); settings = config(tmp_path / "continued")
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        services, model = setup(settings, client)
+        code = check_connected.run_check(settings, "Continue saved Itinerary step", model=model, providers=services, resume_data=resume_data)
+    result_path = next((settings.data_path / "reports").glob("*/report.json"))
+    report = json.loads(result_path.read_text()); state = report["workflow"]
+    assert code == 0 and handler.roles == ["Schedule"]
+    assert services.tool_calls == (["places"] if old_report_without_places else [])
+    assert not services.audit()["railradar"] and len(services.audit()["serpapi"]) == int(old_report_without_places)
+    assert state["transport"] == resume_data[0]["transport"] and state["hotels"] == resume_data[0]["hotels"]
+    assert state["preferences"] == original["workflow"]["preferences"]
+    assert state["transport"][0]["source"] == original["workflow"]["transport"][0]["source"]
+    assert report["reported_total_tokens"] == 200 and report["previous_run"]["reported_total_tokens"] == 600
+    assert report["previous_run"]["request_counts"] == {"serpapi": 2, "railradar": 4}
+    assert "four_roles_reported_usage" not in report["checks"] and all(report["checks"].values())
+    assert report["limits"] == {"groq_calls": 2, "serpapi_requests": int(old_report_without_places), "railradar_requests": 0}
+    assert path.read_bytes() == original_bytes
+    assert state["costs"]["budget_status"] == "unknown" and state["itinerary"]["contains_assumed_prices"]
+
+
+def test_resume_failure_still_preserves_evidence_for_another_continuation(tmp_path):
+    path, _ = saved_failed_itinerary(tmp_path)
+    resume_data = load_itinerary_resume(path)
+    base = Responses(); settings = config(tmp_path / "continued")
+    with httpx.Client(transport=httpx.MockTransport(itinerary_rate_limit(base)), trust_env=False) as client:
+        services, model = setup(settings, client)
+        code = check_connected.run_check(settings, "Continue", model=model, providers=services, resume_data=resume_data)
+    result_path = next((settings.data_path / "reports").glob("*/report.json"))
+    report = json.loads(result_path.read_text())
+    assert code == 2 and not services.tool_calls and base.roles == ["Schedule"]
+    assert report["reported_total_tokens"] is None  # Failed-call consumption is unknown.
+    again, history, mode = load_itinerary_resume(result_path)
+    assert again["places"] == resume_data[0]["places"] and mode == "mock"
+    assert again["transport"] == resume_data[0]["transport"]
+
+
+def test_resume_allows_only_one_schedule_correction_without_any_new_search(tmp_path):
+    path, _ = saved_failed_itinerary(tmp_path)
+    resume_data = load_itinerary_resume(path)
+    base = Responses(); schedules = []
+    def handler(request):
+        response = base(request)
+        if request.url.host == "api.groq.com":
+            name = json.loads(request.content)["response_format"]["json_schema"]["name"]
+            assert name == "Schedule"  # No intake or ranking calls during resume.
+            schedules.append(name)
+            if len(schedules) == 1:
+                body = response.json()
+                answer = json.loads(body["choices"][0]["message"]["content"])
+                answer["activities"][0].update(start="08:00", end="09:00")
+                body["choices"][0]["message"]["content"] = json.dumps(answer)
+                return httpx.Response(200, json=body)
+        return response
+    settings = Settings(_env_file=None, data_dir=tmp_path / "continued", groq_api_key="groq-secret",
+                        groq_model="openai/gpt-oss-120b", train_fare_mode="mock")
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        # No SerpApi/RailRadar keys or HTTP clients are needed with retained places.
+        model = create_model(settings, http_client=client)
+        services = TravelProviderSession(settings, jaipur_probe_bindings())
+        code = check_connected.run_check(settings, "Continue", model=model, providers=services, resume_data=resume_data)
+    assert code == 0 and schedules == ["Schedule", "Schedule"] and not services.tool_calls
+    assert services.audit() == {"serpapi": [], "railradar": []}
+    report = json.loads(next((settings.data_path / "reports").glob("*/report.json")).read_text())
+    assert report["reported_total_tokens"] == 400 and report["workflow"]["itinerary"]["correction_attempts"] == 1
+
+
+@pytest.mark.parametrize("extra", [["--live"], ["--fare-mode=live"], ["--transport-mode", "flight"], ["--departure", "2027-02-10"]])
+def test_resume_refuses_new_trip_overrides_before_loading_keys(monkeypatch, extra):
+    def forbidden(*a, **k): raise AssertionError("Conflicting options cannot load settings")
+    monkeypatch.setattr(check_connected, "Settings", forbidden)
+    with pytest.raises(SystemExit) as exc:
+        check_connected.main(["--resume-report", "ignored.json", *extra])
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("damage", ["missing_hotels", "wrong_route", "synthetic", "past_date", "wrong_role"])
+def test_invalid_resume_is_rejected_before_loading_keys(tmp_path, monkeypatch, damage):
+    path, report = saved_failed_itinerary(tmp_path)
+    state = report["workflow"]
+    if damage == "missing_hotels": state["hotels"] = []
+    elif damage == "wrong_route": state["transport"][0]["origin"] = "Mumbai"
+    elif damage == "synthetic": state["hotels"][0]["source"]["synthetic"] = True
+    elif damage == "past_date": state["preferences"]["departure_date"] = "2020-01-01"
+    elif damage == "wrong_role": state["specialist_error"]["role"] = "hotels"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    def forbidden(*a, **k): raise AssertionError("Invalid resume cannot load settings/keys")
+    monkeypatch.setattr(check_connected, "Settings", forbidden)
+    assert check_connected.main(["--resume-report", str(path)]) == 2
+
+
+def test_ranking_short_aliases_map_back_to_full_ids_and_do_not_claim_affordability():
+    base = Responses(); sent = []; token_prefix = "opaque-provider-token-" + "x" * 250
+    def handler(request):
+        response = base(request)
+        body = response.json()
+        if request.url.host == "serpapi.com" and request.url.params.get("engine") == "google_hotels":
+            row = body["properties"][0]
+            body["properties"] = [dict(row, name=f"Test hotel {i}", property_token=token_prefix + str(i)) for i in range(16)]
+        elif request.url.host == "api.groq.com":
+            wire = json.loads(request.content)
+            if wire["response_format"]["json_schema"]["name"] == "OfferRanking":
+                data = json.loads(wire["messages"][1]["content"]); sent.append(data)
+                answer = json.loads(body["choices"][0]["message"]["content"])
+                answer["ranked_ids"].reverse()
+                answer["reason"] = "The whole trip is definitely within your budget."
+                body["choices"][0]["message"]["content"] = json.dumps(answer)
+        return httpx.Response(response.status_code, json=body)
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        services, model = setup(config(), client)
+        state = build_provider_workflow(model, InMemorySaver(), services).invoke({"user_message": "Test"}, {"configurable": {"thread_id": "aliases"}})
+    assert [o["id"] for o in sent[1]["candidates"]] == [f"H{i:02d}" for i in range(1, 17)]
+    assert all("budget_total" not in data["preferences"] for data in sent)
+    assert token_prefix not in json.dumps(sent)
+    assert state["hotels"][0]["name"] == "Test hotel 15" and token_prefix in state["hotels"][0]["id"]
+    assert "ASSUMED DEMO FARES" in state["transport"][0]["recommendation_reason"]
+    assert "affordability remains unknown" in state["hotels"][0]["recommendation_reason"]
+    assert not any("definitely within" in o["recommendation_reason"] for o in state["transport"] + state["hotels"])
+
+
+def test_alias_ranking_rejects_an_invented_or_duplicate_alias():
+    from backend.agents.ranking import OfferRanking, apply_ranking
+    from backend.llm import ModelCallError
+    from backend import specialist_fixtures
+    offers = specialist_fixtures.hotels(TripPreferences(**P))[:2]
+    aliases = {"H01": offers[0].id, "H02": offers[1].id}
+    for ids in (["H01", "H01"], ["H01", "H99"], ["H01"]):
+        with pytest.raises(ModelCallError):
+            apply_ranking(OfferRanking(ranked_ids=ids, reason="Test"), offers, aliases=aliases)

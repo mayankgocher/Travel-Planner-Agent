@@ -418,5 +418,35 @@ tests/test_connected.py intercepts actual ChatGroq/httpx payloads and blocks soc
 It covers all four roles for train/flight/compare, explicit tools, error stops,
 overnight stay derivation, refreshing incompatible hotels, retained places, missing
 preferences, unknown real affordability and safe reports. Full suite: 221 tests.
-New Windows/live verification remains pending; UI, weather, locks and snapshots
-are not implemented by this checkpoint.
+The original 221-test suite subsequently passed on Windows; connected retrieval
+then succeeded but Groq rate-limited the itinerary call. UI, weather, locks and
+snapshots are not implemented by this checkpoint.
+
+## Checkpoint 10 recovery: three small changes to follow
+
+1. In agents/ranking.py, a prompt uses H01/T01 instead of an opaque provider ID.
+   apply_ranking checks the aliases then maps them back to the original offers.
+   Price provenance is unchanged. Incomplete-price rankings use an explicit scope
+   notice rather than trusting model prose about affordability. Ranking order
+   remains an LLM decision; filters and budget truthfulness remain Python rules.
+2. In agents/itinerary.py, self.places is assigned immediately after retrieval.
+   The graph's ModelCallError branch copies those places into shared state. Thus
+   a model failure does not discard a successful Maps query.
+3. scripts/connected_recovery.py reads and validates the earlier connected report.
+   It returns completed recommendations plus a state with pending=["itinerary"].
+   check_connected.py seeds a new checkpoint with update_state(as_node="hotels")
+   and streams from that checkpoint with input=None. This starts after the completed
+   hotel step; no intake or transport/hotel retrieval/ranking repeats. New usage
+   is separate from historical usage. Missing places require one Maps call.
+
+This recovery is a diagnostic command, not a fifth agent or a new persistence
+framework. It supports only the failed itinerary step of the fixed Delhi/Jaipur
+probe, rejects incompatible/past input, and never alters the source report.
+One optional schedule correction remains; HTTP failures are not automatically
+retried. Actual limits still apply even on an account intended for paid usage.
+
+237 offline tests pass on Linux Python 3.12.14. New cases cover 429 retention,
+JSON/ZIP continuation with/without places, no repeated provider searches, the
+one-correction limit, rejected evidence/options, historical/new token separation,
+short-ID round trips and rejecting invented/duplicate IDs. The original Windows
+suite had 221 tests; the recovery revision awaits the user's Windows/live check.

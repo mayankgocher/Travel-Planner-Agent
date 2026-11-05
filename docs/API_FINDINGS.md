@@ -1,8 +1,8 @@
 # API evidence and integration boundaries
 
 These findings summarize the earlier probe runs reviewed in this conversation.
-The application now has separate hotel/Maps/flight/rail adapters; graph retrieval still uses
-synthetic data. Keys and raw private
+The application has hotel/Maps/flight/rail adapters and a connected provider-backed
+graph probe. The separate check_agents.py retains synthetic travel data. Keys and raw private
 responses are excluded. Evidence is feasibility testing, not a reliability SLA.
 
 | Service | Reviewed observations | Application rule |
@@ -240,3 +240,39 @@ city resolver. It requests train/mock by default and never calls paid rail fares
 Unverified room/passenger/tax scope still prevents actual affordability claims.
 Provider request budgets are independent of model quota. No fresh API calls were
 made during this build; new Windows/connected-live verification is pending.
+
+## Reviewed checkpoint 10 connected failure and recovery
+
+Reviewed share_results(20261104-184805).zip, run
+connected_20261104_184653_663713_8be319. The user also verified the original
+221-test suite on Windows Python 3.12.7. All eight travel requests returned HTTP
+200: two SerpApi queries (hotel/Maps) and six rail schedule/timetable queries.
+The two confirmed CC train legs received clearly assumed fares locally, with
+no paid fare endpoint. Sixteen eligible hotels were retained. Hotel occupancy/
+tax scope remained unknown, as expected.
+
+Known completed model usage was Supervisor 1,260, Transportation 1,071, Hotel
+4,789 = 7,120 tokens. Groq rejected the Itinerary request with HTTP 429 before
+reported completion. It reported service tier on_demand, limit 8,000 TPM,
+used 5,586 and requested 2,584; the failed call's usage is unknown. These counters
+are different measurements, not an arithmetic inconsistency. The error establishes
+the key/organization's effective limit for that request, not the user's billing
+state. The selected model was openai/gpt-oss-120b. An earlier local failure used
+a stale effective GROQ_MODEL; that was corrected before this run.
+
+The itinerary was absent because of model quota, not unsuccessful hotel/rail
+retrieval. Maps succeeded but the original code lost its normalized places on
+the subsequent model error. The recovery revision retains those places for future
+failures, shortens rankings and resumes only the unfinished itinerary. The old
+report necessarily needs one new Maps search; it cannot recover missing places
+from a normalized report that never saved them.
+
+The saved explanations also claimed budget fit with assumed/incomplete quotes.
+Revised rankings and resumed old recommendations replace that unsupported prose
+with explicit price-scope notices. Actual costs remain unknown; no payable fare
+or room-scope evidence has been invented.
+
+The actual saved report passes recovery validation offline: two train offers,
+16 hotels and unchanged source timestamps can be reused. No new requests or keys
+were needed for that validation. The recovery revision passes 237 offline tests
+on Linux Python 3.12.14. New Windows/resumed-live verification remains pending.

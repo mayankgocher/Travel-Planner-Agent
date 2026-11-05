@@ -1,13 +1,13 @@
 # Multi-agent travel planner
 
-Checkpoint 10 — connected provider-backed four-agent workflow, 4 November 2026.
+Checkpoint 10 recovery revision — connected provider-backed four-agent workflow, 4 November 2026.
 
 **This is not yet a complete travel application.** The same four agents can now
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. General
 location selection, weather, FastAPI/Streamlit, locks, product versions and export
 remain pending. Train prices default to labelled deterministic assumptions; real
-rail fare access is still restricted. There are 221 offline tests. The older
+rail fare access is still restricted. There are 237 offline tests. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
 Target: Python **3.12.7**, Windows, project root
@@ -29,8 +29,10 @@ request returned HTTP 403 PLAN_UPGRADE_REQUIRED (86 monthly requests remained).
 The user approved deterministic assumed fares for the interview demo. Checkpoint
 09 passed all 209 tests on Windows and its zero-network replay passed: train
 12015 CC had the assumed INR 618/adult / INR 1,236 for two; 12958 had no CC fare.
-Checkpoint 10 has 221 passing offline tests on Linux Python 3.12.14. Its new
-Windows/connected-live verification remains pending. Source and assumed-price
+The original checkpoint 10 passed 221 tests on Windows Python 3.12.7. Its connected
+run completed retrieval but Groq rate-limited Itinerary (details and recovery below).
+This recovery revision passes 237 offline tests on Linux Python 3.12.14; Windows
+and resumed-live verification of the revision remain pending. Source and assumed-price
 labels are preserved; no real API calls were made in this build environment.
 Dependencies are unchanged.
 
@@ -350,6 +352,57 @@ prices or full application readiness. Unknown hotel/flight passenger/tax scope
 continues to make actual affordability unknown. Assumed fares are excluded from
 verified totals; illustrative comparisons also require complete remaining scope.
 Warnings and unknown totals are expected when evidence is incomplete.
+
+## Recover the 4 November connected run
+
+The reviewed connected_20261104_184653_663713_8be319 report contains eight successful
+travel HTTP responses: two SerpApi and six RailRadar. Supervisor/Transportation/
+Hotel completed, with 7,120 known reported tokens. Groq rejected Itinerary with
+HTTP 429: effective limit 8,000 TPM, used 5,586, requested 2,584. This establishes
+the limit applied to that key/organization, not whether billing was activated.
+The unfinished draft was a model-quota failure, not missing train fares or failed
+hotel/Maps access. Failed-call consumption is unknown.
+
+This revision reduces ranking messages and output by using short local IDs such
+as H01/T01, mapping them back to the complete original records with strict ID
+checks. Repeated hotel dates/adults and unused source notes stay out of ranking
+messages. Python owns the whole-trip budget decision. Incomplete/assumed-price
+rankings use explicit scope notices instead of unsupported affordability prose.
+
+Successful place retrieval now survives a following model failure. The older
+report did not retain those places, so **that particular recovery needs one new
+Maps search**. Saved train/hotel rankings and source timestamps remain unchanged,
+apart from replacing unsafe old explanations with scope notices.
+
+After installing the recovery revision and passing offline tests, run this instead
+of repeating --live:
+
+```powershell
+$env:GROQ_MODEL = "openai/gpt-oss-120b"
+.\venv\Scripts\python.exe scripts\check_connected.py --resume-report "D:\Projects\GenAI\Agentic AI\Travel Planning Agent\data\reports\connected_20261104_184653_663713_8be319\share_results.zip"
+```
+
+**--resume-report is a live continuation**, not a zero-network replay. It validates
+the saved normalized evidence before loading keys, restores only the completed
+steps using LangGraph update_state(as_node="hotels"), then resumes Itinerary and
+finalization. It makes at most **two Groq requests** (one schedule plus one optional
+correction), **one Maps request** if places are missing, and **zero train, hotel or
+flight searches**. With retained places it needs no travel-provider key/request.
+There are no automatic retries or fixed waits. A repeated 429 saves the evidence
+again and reports MODEL_RATE_LIMITED rather than pretending the node succeeded.
+
+Do not combine --resume-report with --live, --departure, --fare-mode or
+--transport-mode; the saved preferences/fare mode must be preserved. Only a failed
+Itinerary model step in this connected Delhi/Jaipur probe is supported. Invalid
+or past-date evidence is rejected; this is not general product version restore.
+The source report is never changed. The new report separates previous-run token/
+request counters from new execution counters. Old source timestamps stay old;
+resumption does not refresh hotel quotes, timetables or seat availability.
+
+The .env, venv and dependencies are unchanged. The PowerShell environment variable
+above sets the selected model for that terminal; keep GROQ_MODEL in .env correct
+for future terminals too. Read the new report and share only its share_results.zip.
+237 offline tests passed here; no fresh live requests were made in this revision.
 
 ## Planned product
 

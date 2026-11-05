@@ -17,6 +17,7 @@ from backend.config import Settings
 from backend.llm import create_model
 from backend.providers.session import TravelProviderSession, jaipur_probe_bindings
 from backend.runtime import build_provider_workflow
+from scripts.connected_recovery import load_itinerary_resume
 
 STATE_FIELDS = ("status", "preferences", "supervisor_decision", "model_usage", "agent_usage", "specialist_error", "supervisor_http_status", "input_error",
                 "supervisor_error_detail", "warnings", "trace", "transport", "hotels", "places", "itinerary", "costs", "missing_fields")
@@ -35,7 +36,7 @@ def write_report(folder, report, secrets):
         "<h2>Checks, workflow, normalized results and matching request inputs</h2><pre>" + escape(content) + "</pre></html>", encoding="utf-8")
 
 
-def run_check(settings, message, *, transport_mode="train", model=None, providers=None):
+def run_check(settings, message, *, transport_mode="train", model=None, providers=None, resume_data=None):
     folder = settings.data_path / "reports" / ("connected_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f") + "_" + uuid4().hex[:6])
     folder.mkdir(parents=True)
     secrets = [getattr(settings, k).get_secret_value() for k in ("groq_api_key", "serpapi_api_key", "railradar_api_key")]
@@ -46,6 +47,13 @@ def run_check(settings, message, *, transport_mode="train", model=None, provider
                         "One destination; provider search order is deterministic Python, not an LLM tool-calling loop.",
                         "This is not the FastAPI/Streamlit product. Locks, versions, export and weather remain pending.",
                         "Each live rerun spends fresh requests. No automatic HTTP retries or synthetic schedule/place fallback."]}
+    if resume_data is not None:
+        seed, history, fare_mode = resume_data
+        if settings.train_fare_mode != fare_mode:
+            raise ValueError("Saved fare mode must be preserved")
+        transport_mode = seed["preferences"]["transport_mode"]
+        report.update(previous_run=history, continuation="itinerary_only",
+            limits={"groq_calls": 2, "serpapi_requests": 0 if seed["places"] else 1, "railradar_requests": 0})
     write_report(folder, report, secrets)
     service = providers or TravelProviderSession(settings, jaipur_probe_bindings())
     try:
@@ -53,15 +61,22 @@ def run_check(settings, message, *, transport_mode="train", model=None, provider
             model = model if model is not None else create_model(settings)
             graph = build_provider_workflow(model, InMemorySaver(), service)
             config = {"configurable": {"thread_id": uuid4().hex}, "recursion_limit": 30}
-            observed = {}
-            print("Starting Supervisor and connected provider workflow...", flush=True)
-            for update in graph.stream({"user_message": message}, config, stream_mode="updates"):
+            observed = dict(seed) if resume_data is not None else {}
+            if resume_data is not None:
+                # LangGraph resumes after the last completed node. No Supervisor,
+                # transport worker or hotel worker executes in this continuation.
+                graph.update_state(config, seed, as_node="hotels")
+                print("Resuming Itinerary only; reusing saved transport and hotels...", flush=True)
+            else:
+                print("Starting Supervisor and connected provider workflow...", flush=True)
+            for update in graph.stream(None if resume_data is not None else {"user_message": message}, config, stream_mode="updates"):
                 for node, values in update.items():
                     if node == "__interrupt__":
                         report["clarification"] = [i.value for i in values]
                     else:
                         observed.update(values)
-                        print(node + ": completed", flush=True)
+                        failed = values.get("model_failed") or values.get("supervisor_failed")
+                        print(node + (": failed; details saved in report" if failed else ": completed"), flush=True)
                 report["workflow"] = {key: observed.get(key) for key in STATE_FIELDS}
                 report["requests"], report["provider_errors"] = service.audit(), service.errors
                 write_report(folder, report, secrets)
@@ -75,10 +90,18 @@ def run_check(settings, message, *, transport_mode="train", model=None, provider
                 "requested_mode_preserved": result.get("preferences", {}).get("transport_mode") == transport_mode,
                 "four_roles_reported_usage": bool(result.get("model_usage")) and all(result.get("agent_usage", {}).get(k) for k in ("transport", "hotels", "itinerary")),
                 "no_false_affordability": costs.get("budget_status") == "unknown" and costs.get("complete_subtotal") is None}
+            if resume_data is not None:
+                checks.pop("four_roles_reported_usage")
+                checks["itinerary_reported_usage"] = bool(result.get("agent_usage", {}).get("itinerary"))
+                checks["saved_recommendations_preserved"] = all(result.get(key) == seed[key] for key in ("transport", "hotels", "preferences"))
+                checks["no_transport_or_hotel_search"] = not any(t in ("transport", "hotels") for t in service.tool_calls) and not service.audit()["railradar"]
+                checks["bounded_place_search"] = len(service.audit()["serpapi"]) <= report["limits"]["serpapi_requests"]
             if transport_mode == "train" and settings.train_fare_mode == "mock":
                 checks["assumed_fares_disclosed"] = itinerary.get("contains_assumed_prices") is True and bool(costs.get("assumed_components"))
             report["checks"] = checks
             report["outcome"] = "PASS_CONNECTED_CHECKS" if all(checks.values()) else "REVIEW_REQUIRED"
+            if (result.get("specialist_error") or {}).get("http_status") == 429:
+                report["outcome"] = "MODEL_RATE_LIMITED"
             usage = [result.get("model_usage", {}), *result.get("agent_usage", {}).values()]
             known = [u["total_tokens"] for u in usage if "total_tokens" in u]
             report["reported_total_tokens"] = sum(known) if known else None
@@ -108,11 +131,23 @@ def main(argv=None):
     parser.add_argument("--transport-mode", choices=("train", "flight", "compare"), default="train")
     parser.add_argument("--fare-mode", choices=("mock", "live"), default="mock")
     parser.add_argument("--departure", type=date.fromisoformat)
+    parser.add_argument("--resume-report", type=Path, help="Live continuation of only a failed Itinerary step from a saved connected report")
     args = parser.parse_args(argv)
+    if args.resume_report is not None:
+        supplied = argv if argv is not None else sys.argv[1:]
+        if args.live or args.departure or any(a.split("=", 1)[0] in ("--transport-mode", "--fare-mode") for a in supplied):
+            parser.error("--resume-report is a live continuation; do not combine it with new-trip options")
+        try:
+            resume_data = load_itinerary_resume(args.resume_report)
+        except Exception as exc:
+            print("Resume validation failed (" + type(exc).__name__ + "); no keys loaded or requests made.")
+            return 2
+        return run_check(Settings(train_fare_mode=resume_data[2]), "Continue saved Itinerary step", resume_data=resume_data)
     if not args.live:
         print("Preview: zero calls, no keys loaded. --live enables <=5 Groq calls, <=4 SerpApi calls,")
         print("and <=6 RailRadar requests with mock fares (<=8 only with explicit --fare-mode live).")
         print("Default: Delhi → Jaipur, train CC, assumed demo fares. No paid fare endpoint in mock mode.")
+        print("--resume-report PATH is a LIVE continuation: <=2 Groq calls and <=1 Maps call; no train/hotel searches.")
         return 0
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
     day = args.departure or today + timedelta(days=14)

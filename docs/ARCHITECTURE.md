@@ -4,6 +4,8 @@ Status: Checkpoint 10 connects the four LLM roles to provider-backed retrieval
 through validated LangChain tools, with explicit selected location bindings.
 Train pricing now has an explicitly approved deterministic mock mode. Schedule
 and price provenance are separate. General location selection/UI remain pending.
+The recovery revision adds failed-Itinerary resumption without new agents,
+database layers, retry loops or changes to the product scope.
 The diagram remains the product blueprint: general location selection, weather,
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
@@ -326,3 +328,27 @@ check_connected.py explicitly enables a bounded full run: <=5 Groq, <=4 SerpApi,
 Default train run expects only 2 SerpApi queries. Reports persist after graph-node
 updates and retain safe request inputs, usage and evidence. No booking/seat/PNR
 or weather call occurs. General locations, UI and product plan versions are pending.
+
+### Recovery revision
+
+Ranking requests use short local H01/T01 IDs; Python validates that every alias
+appears once and maps back to original IDs. Complete records remain in state.
+Ranking messages omit repeated hotel dates/adults and the whole-trip budget.
+Finalization still computes budget feasibility. Incomplete/assumed-price offers
+receive guarded scope explanations; an LLM reason cannot establish affordability.
+
+ItineraryAgent retains fetched places before calling the model. A ModelCallError
+now preserves them in the graph. scripts/connected_recovery.py validates a saved
+failed-Itinerary report, including routes, dates, hard constraints, unique IDs,
+live-source labels and hotel coverage. It creates a state seed containing the
+completed recommendations and pending=["itinerary"]. check_connected.py calls
+graph.update_state(..., as_node="hotels"), then graph.stream(None, ...). These are
+LangGraph's existing checkpoint/resumption operations. No Supervisor, transport
+or hotel worker runs during recovery. Missing places cause one Maps query; held
+places cause none. Schedule generation still permits only one correction.
+
+Resumption preserves original timestamps and price provenance. It does not imply
+fresh availability, new room quotes or product version restoration. New usage
+is reported separately from historical counters; unknown failed-call usage stays
+unknown. A 429 is visible as MODEL_RATE_LIMITED, with evidence retained and no
+automatic HTTP retry or fixed pacing. Product architecture remains four agents.

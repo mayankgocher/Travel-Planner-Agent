@@ -1,6 +1,6 @@
 # Progress and continuation
 
-Updated 4 November 2026. Checkpoint 10: provider-backed four-agent composition.
+Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Itinerary.
 
 ## Verified through checkpoint 05
 
@@ -200,12 +200,50 @@ Updated 4 November 2026. Checkpoint 10: provider-backed four-agent composition.
 - Preview passed with zero calls. No real Groq/travel API requests were made here.
   No dependency changes. Windows and connected live verification remain pending.
 
+## Checkpoint 10 live result and recovery revision
+
+- User verified 221 tests on Windows Python 3.12.7. A stale effective GROQ_MODEL
+  first stopped the connected probe; setting openai/gpt-oss-120b corrected it.
+- Reviewed connected_20261104_184653_663713_8be319, attachment
+  share_results(20261104-184805).zip. Eight travel HTTP 200 responses: SerpApi 2,
+  RailRadar 6. Supervisor/Transportation/Hotel completed; known usage 7,120 tokens.
+  Itinerary failed with Groq HTTP 429, effective 8,000 TPM (used 5,586/requested
+  2,584). Billing state is not established by this error. No full draft exists.
+- Both real CC schedules and 16 hotels survived. The older itinerary worker lost
+  fetched places when the model failed. Fixed by retaining places immediately
+  and returning them through the graph error branch.
+- Rankings use compact H01/T01 aliases with strict round-trip validation, omit
+  repeated hotel scope and keep whole-trip budget decisions in Python. Assumed/
+  incomplete-price explanations cannot claim verified budget fit. Old resumed
+  explanations are replaced by safe scope notices; order/evidence stay unchanged.
+- Added connected_recovery.py and check_connected.py --resume-report. It validates
+  saved normalized evidence before loading keys, seeds LangGraph after the completed
+  hotel node and resumes itinerary/finalization. No Supervisor/transport/hotel
+  worker executes. At most 2 Groq calls, <=1 Maps (zero with saved places), zero
+  rail/hotel/flight searches. No automatic retries, fixed waits or new dependency.
+- Original run lacks saved places, so it needs one fresh Maps query. Reused source
+  timestamps remain historical. Source report stays unchanged. New token/request
+  counters are separate from previous-run counters. Failed unknown usage stays
+  unknown. Visible model failures no longer print misleading node "completed";
+  a 429 reports MODEL_RATE_LIMITED.
+- 237 offline tests passed on Linux Python 3.12.14 (5.39 seconds). Includes full
+  intercepted-HTTP recovery, place retention, one-correction bound, no duplicated
+  searches, missing travel keys with retained places, safe ranking ID mapping,
+  invalid report/option rejection and usage/source preservation. No fresh live
+  requests were made here. Actual saved-report validation also passed offline:
+  two train offers, 16 hotels, zero retained places, previous usage 7,120.
+- This revision's Windows and resumed-live verification remain pending. The four
+  agent architecture, dependencies, .env/venv and product scope are unchanged.
+
 ## Next actions
 
-1. Install checkpoint 10 preserving .env/venv and run 221 tests on Windows.
-2. With existing local Groq/SerpApi/RailRadar keys, run check_connected.py --live
-   once (default train/mock). This is a real API run with explicit request bounds.
-   Review share_results.zip. Unknown payable totals are expected; no blind reruns.
+1. Install the checkpoint 10 recovery ZIP preserving .env/venv; run 237 tests on
+   Windows. No pip install or new key is needed.
+2. Keep effective GROQ_MODEL=openai/gpt-oss-120b. Run check_connected.py
+   --resume-report pointing to connected_20261104_184653_663713_8be319/share_results.zip.
+   This is a live continuation: <=2 Groq calls and one Maps query for that older
+   report; zero train/hotel repeats. Do not rerun full --live or the earlier probes.
+   Review the new share_results.zip. Unknown payable totals remain expected.
 3. Add general location candidate discovery/selection and optional daily weather,
    retaining ambiguity and out-of-horizon warnings. The fixed probe is not general
    city coverage. Keep verified schedule and assumed price provenance separate.

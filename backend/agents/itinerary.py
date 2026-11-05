@@ -14,9 +14,11 @@ class ItineraryAgent:
     def __init__(self, model, search_places, timezone="Asia/Kolkata"):
         self.model, self.search_places, self.timezone = model, search_places, timezone
         self.usage = {}
+        self.places, self.warnings = [], []
 
     def __call__(self, state):
         self.usage = {}
+        self.places, self.warnings = [], []
         p = TripPreferences.model_validate(state["preferences"])
         transport = [TransportOffer.model_validate(o) for o in state.get("transport", [])]
         hotels = [HotelOffer.model_validate(o) for o in state.get("hotels", [])]
@@ -34,6 +36,8 @@ class ItineraryAgent:
             places = [PlaceCandidate.model_validate(o) for o in retained]
         else:
             places, search_warnings = unpack_search(self.search_places(p))
+        # Keep successful retrieval even if the following model request fails.
+        self.places, self.warnings = places, search_warnings
         if not places or len({o.id for o in places}) != len(places):
             return {"plan_status": "needs_review", "activities": [], "validation_errors": ["Unique place candidates are required."], "warnings": search_warnings}
         context = {"preferences": p.model_dump(mode="json"), "timezone": self.timezone,

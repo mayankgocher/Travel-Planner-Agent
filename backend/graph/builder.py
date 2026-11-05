@@ -204,7 +204,9 @@ def build_workflow(transport_worker: TransportWorker, hotel_worker: HotelWorker,
                 raise ValueError("Invalid itinerary worker output")
             warnings = []
         except ModelCallError as exc:
-            return model_failure(state, "itinerary", exc, itinerary_worker) | {"itinerary": None}
+            retained = getattr(itinerary_worker, "places", [])
+            return model_failure(state, "itinerary", exc, itinerary_worker) | {"itinerary": None,
+                "places": [o.model_dump(mode="json") for o in retained] or state.get("places", [])}
         except (ValueError, OSError, TimeoutError):
             draft, warnings = None, ["Itinerary step failed; draft is unavailable."]
         warnings += (draft or {}).get("warnings", []) + (draft or {}).get("validation_errors", [])
