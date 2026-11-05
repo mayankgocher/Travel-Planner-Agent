@@ -1,12 +1,19 @@
 """Hotel constraints are enforced in Python; the LLM ranks eligible stays."""
 import json
+from decimal import Decimal
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.agents.ranking import OfferRanking, apply_ranking, ranking_candidate
-from backend.llm import invoke_structured
+from backend.llm import ModelCallError, invoke_structured
 from backend.schemas import TripPreferences
 from backend.services.offer_filters import eligible_hotels
 from backend.providers.results import unpack_search
+
+
+def fallback_hotel_key(offer, currency):
+    nightly = offer.nightly_price if offer.price.currency == currency else None
+    return (nightly if nightly is not None else Decimal("Infinity"),
+            -(offer.guest_rating if offer.guest_rating is not None else -1), offer.id)
 
 
 class HotelAgent:
@@ -33,4 +40,14 @@ class HotelAgent:
             HumanMessage(content=json.dumps({"preferences": p.model_dump(mode="json", exclude={"budget_total"}, exclude_none=True),
                 "candidates": [ranking_candidate(o, alias) for alias, o in zip(aliases, offers)]}, separators=(",", ":")))])
         self.usage = result.usage
-        return apply_ranking(OfferRanking.model_validate(result.parsed), offers, aliases=aliases)
+        ranking = OfferRanking.model_validate(result.parsed)
+        try:
+            return apply_ranking(ranking, offers, aliases=aliases)
+        except ModelCallError:
+            # Only an invalid ID list triggers this branch. Provider/model call
+            # errors above still surface, and hard filters have already run.
+            notice = ("Hotel model ranking rejected: candidate IDs did not match. Used a local sort by "
+                      "comparable quoted nightly price, then higher guest rating.")
+            self.warnings.append(notice)
+            ordered = sorted(offers, key=lambda offer: fallback_hotel_key(offer, p.currency))
+            return apply_ranking(OfferRanking(ranked_ids=[o.id for o in ordered], reason=notice), offers)

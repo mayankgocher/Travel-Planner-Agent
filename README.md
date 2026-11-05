@@ -1,13 +1,13 @@
 # Multi-agent travel planner
 
-Checkpoint 10 recovery revision — connected provider-backed four-agent workflow, 4 November 2026.
+Checkpoint 10 hotel ranking fix — connected provider-backed four-agent workflow, 5 November 2026.
 
 **This is not yet a complete travel application.** The same four agents can now
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. General
 location selection, weather, FastAPI/Streamlit, locks, product versions and export
 remain pending. Train prices default to labelled deterministic assumptions; real
-rail fare access is still restricted. There are 237 offline tests. The older
+rail fare access is still restricted. There are 240 offline tests. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
 Target: Python **3.12.7**, Windows, project root
@@ -31,8 +31,11 @@ The user approved deterministic assumed fares for the interview demo. Checkpoint
 12015 CC had the assumed INR 618/adult / INR 1,236 for two; 12958 had no CC fare.
 The original checkpoint 10 passed 221 tests on Windows Python 3.12.7. Its connected
 run completed retrieval but Groq rate-limited Itinerary (details and recovery below).
-This recovery revision passes 237 offline tests on Linux Python 3.12.14; Windows
-and resumed-live verification of the revision remain pending. Source and assumed-price
+The user ran the recovery revision after enabling UTF-8 mode on Windows. All
+seven travel requests succeeded, but the Hotel Agent's ranking still failed ID
+validation. This fix preserves eligible hotels and continues with a local order
+when that happens. The fix passes 240 offline tests on Linux Python 3.12.14;
+Windows and live verification of the fix remain pending. Source and assumed-price
 labels are preserved; no real API calls were made in this build environment.
 Dependencies are unchanged.
 
@@ -402,7 +405,30 @@ resumption does not refresh hotel quotes, timetables or seat availability.
 The .env, venv and dependencies are unchanged. The PowerShell environment variable
 above sets the selected model for that terminal; keep GROQ_MODEL in .env correct
 for future terminals too. Read the new report and share only its share_results.zip.
-237 offline tests passed here; no fresh live requests were made in this revision.
+The resume command above is specific to the earlier Itinerary failure. The 5
+November hotel failure has no saved hotel offers and cannot use that command.
+
+## Verify the hotel ranking fix
+
+The Hotel Agent still uses valid model rankings. If the returned list omits,
+duplicates or invents an ID, the agent discards the entire ranking and explanation.
+Python sorts the original eligible hotels by quoted nightly price in the trip
+currency (unknown/incomparable quotes last), then by higher guest rating, with a
+stable ID tie-breaker. The report warns when this local sort is used. No model
+retry, hotel re-search, invented hotel or affordability claim is introduced.
+
+Install `Travel_Project_Checkpoint_10_Hotel_Fix.zip` using its existing installer
+and run the offline suite (240 tests). Tests explicitly decode reports as UTF-8,
+so setting `PYTHONUTF8` is no longer necessary for report comparisons. Keep the
+existing venv and keys. Once tests pass, run a fresh connected probe:
+
+```powershell
+$env:GROQ_MODEL = "openai/gpt-oss-120b"
+.\venv\Scripts\python.exe scripts\check_connected.py --live --fare-mode mock
+```
+
+This makes fresh requests with the same existing request bounds. Share the new
+report if needed. This revision was tested offline only.
 
 ## Planned product
 

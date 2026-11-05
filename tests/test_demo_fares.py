@@ -184,10 +184,10 @@ def test_replay_preserves_input_and_timestamps_without_loading_keys_or_network(t
     monkeypatch.setattr(check_rail, "Settings", forbidden)
     monkeypatch.setattr(check_rail, "RailRadarHttp", forbidden)
     assert check_rail.run_replay(source, output_root=tmp_path / "output") == 0
-    report = json.loads(next((tmp_path / "output" / "reports").glob("*/report.json")).read_text())
+    report = json.loads(next((tmp_path / "output" / "reports").glob("*/report.json")).read_text(encoding="utf-8"))
     assert source.read_bytes() == before and not report["requests"] and report["maximum_requests"] == 0
     assert report["original_request_count"] == 1 and report["saved_report_replay"]
     assert report["trains"][0]["source"]["fetched_at"] == original["trains"][0]["source"]["fetched_at"]
     assert report["trains"][0]["price"]["pricing_mode"] == "demo"
-    html = next((tmp_path / "output" / "reports").glob("*/report.html")).read_text()
+    html = next((tmp_path / "output" / "reports").glob("*/report.html")).read_text(encoding="utf-8")
     assert "ASSUMED DEMO FARE" in html and "zero API requests" in html

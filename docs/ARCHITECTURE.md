@@ -352,3 +352,13 @@ fresh availability, new room quotes or product version restoration. New usage
 is reported separately from historical counters; unknown failed-call usage stays
 unknown. A 429 is visible as MODEL_RATE_LIMITED, with evidence retained and no
 automatic HTTP retry or fixed pacing. Product architecture remains four agents.
+
+### Hotel ranking fix
+
+Short aliases reduce payload size but do not guarantee a complete ID list. If a
+parsed hotel ranking fails the ID check, the Hotel Agent discards it and uses a
+deterministic order over the same hard-filtered offers: comparable quoted nightly
+price, higher guest rating, then stable ID. Unknown and incomparable prices sort
+after comparable quotes. A report warning records the local sort. This requires
+no retry, leaves provider/model request failures on their existing paths and
+does not relax filters or price completeness checks.

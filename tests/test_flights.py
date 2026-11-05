@@ -182,13 +182,13 @@ def test_two_leg_probe_keeps_each_legs_own_parameters_and_no_extra_requests(tmp_
     with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
         code = check_providers.run_check(settings, preferences(), ["outbound_flights", "return_flights"],
             flight_airports=(DEL, JAI), http_factory=lambda key: SerpApiHttp(key, http_client=client))
-    path = next((tmp_path / "reports").glob("*/report.json")); report = json.loads(path.read_text())
+    path = next((tmp_path / "reports").glob("*/report.json")); report = json.loads(path.read_text(encoding="utf-8"))
     assert code == 0 and len(queries) == len(report["requests"]) == 2
     assert all(len(case["requests"]) == 1 for case in report["cases"])
     assert report["cases"][0]["requests"][0]["parameters"]["departure_id"] == "DEL"
     assert report["cases"][1]["requests"][0]["parameters"]["departure_id"] == "JAI"
-    assert "offline-key" not in path.read_text()
-    assert "ZZ 100" in (path.parent / "report.html").read_text()
+    assert "offline-key" not in path.read_text(encoding="utf-8")
+    assert "ZZ 100" in (path.parent / "report.html").read_text(encoding="utf-8")
 
 
 def test_outbound_error_skips_return_and_preserves_sanitized_report(tmp_path):
@@ -199,7 +199,7 @@ def test_outbound_error_skips_return_and_preserves_sanitized_report(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
         code = check_providers.run_check(settings, preferences(), ["outbound_flights", "return_flights"],
             flight_airports=(DEL, JAI), http_factory=lambda key: SerpApiHttp(key, http_client=client))
-    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text())
+    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text(encoding="utf-8"))
     assert code == 2 and len(calls) == len(report["cases"]) == 1
     assert report["cases"][0]["outcome"] == "PROVIDER_ERROR"
 

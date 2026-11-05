@@ -179,7 +179,7 @@ def test_connected_report_captures_each_request_and_redacts_all_configured_keys(
     with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
         services, model = setup(settings, client)
         code = check_connected.run_check(settings, "Offline test input", model=model, providers=services)
-    path = next((tmp_path / "reports").glob("*/report.json")); text = path.read_text(); report = json.loads(text)
+    path = next((tmp_path / "reports").glob("*/report.json")); text = path.read_text(encoding="utf-8"); report = json.loads(text)
     assert code == 0 and report["outcome"] == "PASS_CONNECTED_CHECKS" and all(report["checks"].values())
     assert len(report["requests"]["serpapi"]) == 2 and len(report["requests"]["railradar"]) == 4
     assert report["reported_total_tokens"] == 800
@@ -255,7 +255,7 @@ def saved_failed_itinerary(tmp_path):
         code = check_connected.run_check(settings, "Offline test", model=model, providers=services)
     path = next((tmp_path / "reports").glob("*/report.json"))
     assert code == 2 and len(services.audit()["serpapi"]) == 2
-    return path, json.loads(path.read_text())
+    return path, json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_rate_limit_preserves_successful_places_and_does_not_automatically_retry(tmp_path):
@@ -264,7 +264,7 @@ def test_rate_limit_preserves_successful_places_and_does_not_automatically_retry
     assert state["status"] == "partial_results" and state["specialist_error"]["http_status"] == 429
     assert state["places"][0]["id"] == "place:test-museum" and len(state["transport"]) == 2 and state["hotels"]
     assert report["reported_total_tokens"] == 600 and state["agent_usage"]["itinerary"] == {}
-    assert "groq-secret" not in path.read_text()
+    assert "groq-secret" not in path.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("old_report_without_places", [False, True])
@@ -282,7 +282,7 @@ def test_resume_executes_only_itinerary_and_separates_old_usage(tmp_path, old_re
         services, model = setup(settings, client)
         code = check_connected.run_check(settings, "Continue saved Itinerary step", model=model, providers=services, resume_data=resume_data)
     result_path = next((settings.data_path / "reports").glob("*/report.json"))
-    report = json.loads(result_path.read_text()); state = report["workflow"]
+    report = json.loads(result_path.read_text(encoding="utf-8")); state = report["workflow"]
     assert code == 0 and handler.roles == ["Schedule"]
     assert services.tool_calls == (["places"] if old_report_without_places else [])
     assert not services.audit()["railradar"] and len(services.audit()["serpapi"]) == int(old_report_without_places)
@@ -305,7 +305,7 @@ def test_resume_failure_still_preserves_evidence_for_another_continuation(tmp_pa
         services, model = setup(settings, client)
         code = check_connected.run_check(settings, "Continue", model=model, providers=services, resume_data=resume_data)
     result_path = next((settings.data_path / "reports").glob("*/report.json"))
-    report = json.loads(result_path.read_text())
+    report = json.loads(result_path.read_text(encoding="utf-8"))
     assert code == 2 and not services.tool_calls and base.roles == ["Schedule"]
     assert report["reported_total_tokens"] is None  # Failed-call consumption is unknown.
     again, history, mode = load_itinerary_resume(result_path)
@@ -339,7 +339,7 @@ def test_resume_allows_only_one_schedule_correction_without_any_new_search(tmp_p
         code = check_connected.run_check(settings, "Continue", model=model, providers=services, resume_data=resume_data)
     assert code == 0 and schedules == ["Schedule", "Schedule"] and not services.tool_calls
     assert services.audit() == {"serpapi": [], "railradar": []}
-    report = json.loads(next((settings.data_path / "reports").glob("*/report.json")).read_text())
+    report = json.loads(next((settings.data_path / "reports").glob("*/report.json")).read_text(encoding="utf-8"))
     assert report["reported_total_tokens"] == 400 and report["workflow"]["itinerary"]["correction_attempts"] == 1
 
 
@@ -405,3 +405,49 @@ def test_alias_ranking_rejects_an_invented_or_duplicate_alias():
     for ids in (["H01", "H01"], ["H01", "H99"], ["H01"]):
         with pytest.raises(ModelCallError):
             apply_ranking(OfferRanking(ranked_ids=ids, reason="Test"), offers, aliases=aliases)
+
+
+@pytest.mark.parametrize("fault", ["missing", "duplicate", "unknown"])
+def test_bad_hotel_ranking_keeps_eligible_offers_and_reaches_itinerary(fault):
+    base = Responses()
+
+    def handler(request):
+        response = base(request)
+        body = response.json()
+        if request.url.params.get("engine") == "google_hotels":
+            row = body["properties"][0]
+            properties = [dict(row, name=f"Hotel {i}", property_token=f"hotel-{i}") for i in range(16)]
+            for i, rating in ((1, 4.4), (2, 4.8)):
+                properties[i].update(overall_rating=rating, rate_per_night={"extracted_lowest": 2100})
+            properties.append(dict(row, name="Wrong class", property_token="wrong-class",
+                                   extracted_hotel_class=2, rate_per_night={"extracted_lowest": 2000}))
+            body["properties"] = properties
+        elif request.url.host == "api.groq.com" and base.roles == ["SupervisorDecision", "OfferRanking", "OfferRanking"]:
+            message = body["choices"][0]["message"]
+            answer = json.loads(message["content"])
+            ids = answer["ranked_ids"]
+            if fault == "missing":
+                ids.pop()
+            elif fault == "duplicate":
+                ids[-1] = ids[0]
+            else:
+                ids[-1] = "H99"
+            answer["reason"] = "Guaranteed to fit the entire budget."
+            message["content"] = json.dumps(answer)
+        return httpx.Response(response.status_code, json=body)
+
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
+        services, model = setup(config(), client)
+        graph = build_provider_workflow(model, InMemorySaver(), services)
+        result = graph.invoke({"user_message": "Test"}, {"configurable": {"thread_id": fault}})
+
+    assert base.roles == ["SupervisorDecision", "OfferRanking", "OfferRanking", "Schedule"]
+    assert services.tool_calls == ["transport", "hotels", "places"]
+    assert result["status"] == "draft_ready_with_warnings"
+    assert len(result["hotels"]) == 16
+    assert [offer["name"] for offer in result["hotels"][:2]] == ["Hotel 2", "Hotel 1"]
+    assert all(offer["hotel_class"] == 3 for offer in result["hotels"])
+    assert all("Guaranteed" not in offer["recommendation_reason"] for offer in result["hotels"])
+    assert result["agent_usage"]["hotels"]["total_tokens"] == 200
+    assert result["costs"]["budget_status"] == "unknown"
+    assert any("Hotel model ranking rejected" in warning for warning in result["warnings"])

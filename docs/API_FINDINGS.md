@@ -276,3 +276,17 @@ The actual saved report passes recovery validation offline: two train offers,
 16 hotels and unchanged source timestamps can be reused. No new requests or keys
 were needed for that validation. The recovery revision passes 237 offline tests
 on Linux Python 3.12.14. New Windows/resumed-live verification remains pending.
+
+## Reviewed 5 November hotel ranking failure
+
+Run connected_20261105_144353_861241_1918ca, attachment
+share_results(20261105-144512).zip: six RailRadar HTTP 200 responses, one SerpApi
+hotel HTTP 200, and 4,260 reported model tokens. The Hotel Agent's structured
+reply failed the local alias check. The report does not retain the invalid list,
+so it does not establish whether aliases were missing, repeated or unknown. No
+429 or provider failure was reported. Itinerary did not run and Maps was not
+called. Short aliases alone did not prevent the validation failure.
+
+The hotel fix rejects the ranking and continues with existing eligible hotel
+records in a local order. Offline intercepted responses exercised all three
+invalid-list shapes. The new ranking path still awaits live verification.

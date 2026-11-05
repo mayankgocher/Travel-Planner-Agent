@@ -229,7 +229,7 @@ def test_failed_first_request_stops_second_and_saves_audit(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as client:
         result = check_providers.run_check(settings, preferences(), ["hotels", "places"],
             http_factory=lambda key: SerpApiHttp(key, http_client=client))
-    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text())
+    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text(encoding="utf-8"))
     assert result == 2 and len(calls) == len(report["requests"]) == len(report["cases"]) == 1
     assert report["cases"][0]["outcome"] == "PROVIDER_ERROR"
 

@@ -235,15 +235,32 @@ Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Iti
 - This revision's Windows and resumed-live verification remain pending. The four
   agent architecture, dependencies, .env/venv and product scope are unchanged.
 
+## 5 November hotel ranking fix
+
+- Windows recovery tests initially had two report-encoding failures, which the
+  user worked around with UTF-8 mode before the live probe. Tests now explicitly
+  read UTF-8 reports.
+- Live run connected_20261105_144353_861241_1918ca returned seven travel HTTP
+  200 responses. Groq returned a Hotel Agent reply, but its local ID list failed
+  validation. No 429 was recorded. Itinerary did not run and the report has no
+  saved hotel offers, so Itinerary-only resumption is not applicable.
+- A rejected hotel ID list now triggers a local sort of the same eligible
+  candidates (comparable nightly price, higher guest rating, stable ID). No
+  additional model/search call or unsupported affordability claim. Valid model
+  ranks still apply and genuine provider/model call errors remain visible.
+- 240 offline tests passed on Linux Python 3.12.14. New cases inject missing,
+  duplicate and unknown IDs and verify itinerary completion with hard filters,
+  warnings, usage and request bounds preserved. No live API calls were made here.
+
 ## Next actions
 
-1. Install the checkpoint 10 recovery ZIP preserving .env/venv; run 237 tests on
-   Windows. No pip install or new key is needed.
-2. Keep effective GROQ_MODEL=openai/gpt-oss-120b. Run check_connected.py
-   --resume-report pointing to connected_20261104_184653_663713_8be319/share_results.zip.
-   This is a live continuation: <=2 Groq calls and one Maps query for that older
-   report; zero train/hotel repeats. Do not rerun full --live or the earlier probes.
-   Review the new share_results.zip. Unknown payable totals remain expected.
+1. Install the checkpoint 10 hotel fix ZIP preserving .env/venv; run 240 offline
+   tests on Windows. No pip install or new key is needed.
+2. Keep effective GROQ_MODEL=openai/gpt-oss-120b. Run one fresh
+   check_connected.py --live --fare-mode mock and review the report. Do not use
+   --resume-report on the failed Hotel Agent run. Unknown payable totals remain
+   expected. User reported upgraded limits of 250,000 TPM / 1,000 RPM; no Groq
+   rate-limit error was reported by the latest run.
 3. Add general location candidate discovery/selection and optional daily weather,
    retaining ambiguity and out-of-horizon warnings. The fixed probe is not general
    city coverage. Keep verified schedule and assumed price provenance separate.

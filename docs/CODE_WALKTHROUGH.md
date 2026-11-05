@@ -450,3 +450,13 @@ JSON/ZIP continuation with/without places, no repeated provider searches, the
 one-correction limit, rejected evidence/options, historical/new token separation,
 short-ID round trips and rejecting invented/duplicate IDs. The original Windows
 suite had 221 tests; the recovery revision awaits the user's Windows/live check.
+
+## Hotel ranking fix
+
+Read `backend/agents/hotel.py`. The `try` block checks a parsed model ranking's
+IDs. If that check fails, the agent keeps the original eligible offers, discards
+the model explanation, and sorts by quoted nightly price in the requested
+currency, then higher guest rating and stable ID. A warning explains the change.
+There is no second model call or search; the graph continues to Itinerary as
+usual. Valid model rankings still work unchanged. Quoted nightly prices do not
+establish occupancy, taxes, final totals or booking status.

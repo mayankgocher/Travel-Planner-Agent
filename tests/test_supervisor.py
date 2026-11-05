@@ -233,10 +233,10 @@ def test_live_check_writes_parsed_report_with_intercepted_request(tmp_path, monk
     with client:
         assert check.main() == 0
     path = next((tmp_path / "reports").glob("*.json"))
-    report = json.loads(path.read_text())
+    report = json.loads(path.read_text(encoding="utf-8"))
     assert report["outcome"] == "PASS_CHECKS" and len(requests) == 1
     assert report["synthetic_downstream"] and report["model_usage"]["total_tokens"] == 180
-    assert "fixture-secret" not in path.read_text() and "not-to-be-retained" not in path.read_text()
+    assert "fixture-secret" not in path.read_text(encoding="utf-8") and "not-to-be-retained" not in path.read_text(encoding="utf-8")
 
 
 def test_error_details_exclude_generation_and_redact_before_truncation():
@@ -266,7 +266,7 @@ def test_http_400_reason_survives_graph_and_report_without_secrets(tmp_path, mon
         monkeypatch.setattr(check, "create_model", lambda settings: model)
         monkeypatch.setattr(check.sys, "argv", ["check_supervisor.py", "--live"])
         assert check.main() == 2
-    report = json.loads(next((tmp_path / "reports").glob("*.json")).read_text())
+    report = json.loads(next((tmp_path / "reports").glob("*.json")).read_text(encoding="utf-8"))
     assert len(requests) == 1 and report["outcome"] == "PROVIDER_REQUEST_ERROR"
     assert report["supervisor_http_status"] == 400
     assert report["supervisor_error_detail"]["code"] == "invalid_schema"
@@ -284,7 +284,7 @@ def test_four_agent_report_preserves_rejected_reply_usage_or_unknown(tmp_path, m
     monkeypatch.setattr(check.sys, "argv", ["check_agents.py", "--live"])
     with client:
         assert check.main() == 2
-    report = json.loads(next((tmp_path / "reports").glob("*.json")).read_text())
+    report = json.loads(next((tmp_path / "reports").glob("*.json")).read_text(encoding="utf-8"))
     assert report["reported_total_tokens"] == expected_total and len(requests) == 1
     assert report["agent_usage"] == {}
     if status == 200:

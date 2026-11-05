@@ -251,7 +251,7 @@ def test_full_rail_probe_writes_input_pairs_partial_prices_and_share_archive(tmp
     with httpx.Client(transport=httpx.MockTransport(handler_factory(calls)), trust_env=False) as client:
         code = check_rail.run_check(settings, preferences(),
             http_factory=lambda key, **kwargs: RailRadarHttp(key, http_client=client, **kwargs))
-    folder = next((tmp_path / "reports").iterdir()); text = (folder / "report.json").read_text(); report = json.loads(text)
+    folder = next((tmp_path / "reports").iterdir()); text = (folder / "report.json").read_text(encoding="utf-8"); report = json.loads(text)
     assert code == 0 and report["outcome"] == "PASS_CHECKS" and len(calls) == len(report["requests"]) == 5
     assert report["requests"][0]["parameters"]["q"] == "NDLS" and report["requests"][-1]["parameters"]["classCode"] == "CC"
     assert len(report["priced_offer_ids"]) == 1 and "offline-rail-key" not in text
@@ -266,7 +266,7 @@ def test_fare_404_preserves_schedules_and_does_not_try_another_fare(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler_factory(calls, fare_status=404)), trust_env=False) as client:
         code = check_rail.run_check(settings, preferences(),
             http_factory=lambda key, **kwargs: RailRadarHttp(key, http_client=client, **kwargs))
-    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text())
+    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text(encoding="utf-8"))
     assert code == 2 and report["outcome"] == "PROVIDER_ERROR" and len(calls) == 5
     assert len(report["trains"]) == 3 and all(t["price"]["amount"] is None for t in report["trains"])
     assert len(report["timetables"]) == 1 and report["error"]["http_status"] == 404
@@ -276,7 +276,7 @@ def test_missing_local_key_needs_no_requests_and_preview_loads_no_key(tmp_path, 
     assert check_rail.main([]) == 0 and "zero API calls" in capsys.readouterr().out
     settings = Settings(_env_file=None, railradar_api_key="", data_dir=tmp_path)
     assert check_rail.run_check(settings, preferences()) == 2
-    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text())
+    report = json.loads(next((tmp_path / "reports").glob("*/report.json")).read_text(encoding="utf-8"))
     assert not report["requests"] and "RAILRADAR_API_KEY" in report["configuration_hint"]
 
 
