@@ -25,9 +25,10 @@ def test_load_saved_jaipur_trip(monkeypatch):
     text = "\n".join(item.value for item in screen.markdown)
     assert "Train 12015" in text and "Train 12016" in text
     assert "Demo fare: ₹1,236" in text and "Demo fare: ₹1,086" in text
-    assert "Indie Stays Jaipur" in text and "₹7,588 quoted for the stay" in text
+    assert any(item.value == "Indie Stays Jaipur" for item in screen.text)
+    assert "₹7,588 quoted for the stay" in text
     assert sum(line.startswith("- ") for line in text.splitlines()) == 9
     assert text.count("Opening hours unverified") == 6
     assert "Wed" not in text and "Thu, 19 Nov 2026" in text
     assert any("Budget fit unverified" in item.value for item in screen.warning)
-    assert not any("Generate plan" in button.label for button in screen.button)
+    assert any(button.label == "Generate plan" for button in screen.button)

@@ -1,12 +1,12 @@
 # Multi-agent travel planner
 
-Checkpoint 11 — offline Streamlit demo of the saved Jaipur trip, 5 November 2026.
+Checkpoint 12 — local Streamlit and FastAPI planning demo, 6 November 2026.
 
 **This is not yet a complete travel application.** The same four agents can now
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. The local
-Streamlit demo shows a saved result. Live planning from the screen, general location
-selection, weather, locks, product versions and export remain pending. Train prices
+Streamlit demo shows a saved result and can request a fresh Delhi/Jaipur plan.
+General location selection, weather, locks, product versions and export remain pending. Train prices
 default to labelled deterministic assumptions; real rail fare access is still restricted. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
@@ -40,10 +40,34 @@ travel-provider request. Checkpoint 11 uses that saved result. It does not refre
 any quotes, schedules or hours.
 Dependencies are unchanged.
 
+## Generate a live plan from the browser
+
+Install `Travel_Project_Checkpoint_12.zip` using `INSTALL_CHECKPOINT_12.ps1` from
+an extracted staging folder. The installer preserves `.env`, the venv, and reports.
+Open two PowerShell terminals in the project root. Start FastAPI in the first:
+
+```powershell
+$env:GROQ_MODEL = "openai/gpt-oss-120b"
+.\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+Start Streamlit in the second using the command below. Open the printed URL,
+choose **Live planning**, and click **Generate plan** once. This spends provider
+quota only on submission. The browser demo is a fixed Delhi → Jaipur round trip
+with 1–7 nights and up to 6 adults. The form supports train, flight, or comparison;
+it uses existing filters and ranking. Rail fares are explicitly demo amounts.
+The existing server-side Groq and SerpApi keys are required; rail also needs
+RailRadar. The API rejects invalid dates or price ranges before loading keys.
+`GET /health` checks startup without contacting providers.
+
+The validated form fields go straight to graph state. The Supervisor node remains
+in the workflow but skips natural-language extraction for this structured input.
+If a provider or model stops the plan, the screen can still show available offers
+and warnings. The server does not display raw diagnostics or generated notes.
+
 ## Open the saved-trip demo
 
-Install Checkpoint 11 with `INSTALL_CHECKPOINT_11.ps1` from an extracted staging
-folder. It keeps your existing `.env`, venv and reports. From the project root:
+The saved sample also works without FastAPI. From the project root:
 
 ```powershell
 .\venv\Scripts\python.exe -m streamlit run .\frontend\app.py --server.address 127.0.0.1 --browser.gatherUsageStats false
@@ -88,7 +112,7 @@ the venv's Python directly avoids PowerShell activation-policy problems.
 
 The environment check sends **no network requests** and does not read API keys.
 It prints package versions and verifies a tiny LangGraph can execute. The offline
-Streamlit launch command is above; FastAPI is not needed for this checkpoint.
+Streamlit launch command is above; FastAPI is only needed for live planning.
 
 `pytest.ini` restricts default test discovery to tests/ and excludes backup_*/.
 Keep installer backups for recovery; they are not additional active test suites.

@@ -4,7 +4,8 @@ Status: Checkpoint 10 connects the four LLM roles to provider-backed retrieval
 through validated LangChain tools, with explicit selected location bindings.
 Train pricing now has an explicitly approved deterministic mock mode. Schedule
 and price provenance are separate. Checkpoint 11 adds the saved-trip Streamlit
-screen. Live UI planning and general location selection remain pending.
+screen; Checkpoint 12 connects it to FastAPI for the fixed Delhi/Jaipur route.
+General location selection remains pending.
 The recovery revision adds failed-Itinerary resumption without new agents,
 database layers, retry loops or changes to the product scope.
 The diagram remains the product blueprint: general location selection, weather,
@@ -371,4 +372,19 @@ snapshot contains only selected itinerary and offer display data, plus retained
 source and price evidence. The screen displays known times and flags unverified
 hours, seats, room costs and budget fit. No provider or graph clients are imported.
 The app omits the original free-text model notes. No change to filters or ranking.
-The next app checkpoint can reuse the layout with a response from FastAPI.
+Checkpoint 12 reuses the layout for a response from FastAPI.
+
+## Checkpoint 12: browser to graph
+
+Streamlit submits one JSON request to loopback `POST /plan`. The API validates
+fixed-route dates, mode, and filters before constructing provider clients. Each
+submission starts an isolated in-memory graph. Structured intake skips Supervisor
+model extraction and preserves form values. The same specialist agents and
+provider bounds apply; mock rail pricing is explicit for this endpoint. `GET
+/health` does not load keys or contact providers. There is no persistent session
+or cross-request search cache in this demo.
+
+`backend/plan_view.py` projects selected offers, costs, verified schedule structure
+and warnings. It preserves source and quote provenance, strips generated notes
+and raw diagnostics, and omits unresolved schedules. Partial offers remain visible.
+The offline sample never sends the POST.

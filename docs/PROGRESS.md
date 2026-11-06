@@ -270,13 +270,34 @@ Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Iti
   returned HTTP 200 from Streamlit's loopback health endpoint. No new model or
   travel-provider requests were made. Windows UI launch remains to be checked.
 
+## Checkpoint 12: live planning from Streamlit
+
+- The user confirmed the Checkpoint 11 screen on Windows and reported one fresh
+  uninterrupted live CLI pass: 10,968 reported model tokens, two SerpApi requests,
+  six RailRadar requests. This tested the Delhi/Jaipur train route with demo fares.
+- Streamlit now offers a live form next to the offline sample. It posts once to
+  local FastAPI and shows the existing workflow's selected transport, hotel,
+  validated activities, quote provenance and warnings. Incomplete results remain
+  labeled. The backend keeps keys server-side and does not contact providers on
+  startup or health checks. Existing agent, provider and ranking code is unchanged.
+- The browser route is fixed, with one to seven nights and up to six adults.
+  Transport can be train, flight or comparison; rail prices remain labeled demo.
+  Structured intake needs no model call to extract the form fields. Natural-language
+  Supervisor intake remains available through the CLI.
+- Linux Python 3.12.14: all 246 offline tests passed (6.31 seconds). New tests
+  cover Streamlit submission through FastAPI and the existing graph, flight and
+  comparison routing, partial output on model rate limits, and validation before
+  credential loading. FastAPI and Streamlit loopback launches both returned HTTP
+  200 on their health endpoints. No live provider calls were made. The Windows
+  browser live submission still needs verification.
+
 ## Next actions
 
-1. Install the checkpoint 11 ZIP preserving .env/venv. Launch the Streamlit screen
-   with the README command and click **Load sample trip**. No new key, pip install,
-   FastAPI server or live probe is needed.
-2. Add a thin FastAPI planning endpoint and connect a Streamlit **Generate plan**
-   action to the existing workflow. Keep the saved sample path for offline demos.
+1. Install Checkpoint 12 preserving .env/venv. Start FastAPI and Streamlit using
+   the two README commands.
+2. Submit one live train plan from the browser and verify transport, hotel,
+   itinerary and warnings. No extra CLI run is needed. Offline mode is still
+   available through **Load sample trip**.
 3. Add general location candidate discovery/selection and optional daily weather,
    retaining ambiguity and out-of-horizon warnings. The fixed probe is not general
    city coverage. Keep verified schedule and assumed price provenance separate.
@@ -289,7 +310,7 @@ Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Iti
 
 Weather, general location selection,
 user selection controls/locks, durable application lifecycle, plan snapshots,
-FastAPI, live Streamlit planning, export and systematic evaluation. Graph checkpoints are not
+export and systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.
 
 ## Preserve decisions

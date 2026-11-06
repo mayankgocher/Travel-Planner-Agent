@@ -471,3 +471,18 @@ notes. Activity warnings were matched to the place IDs in the saved report.
 No backend agent, FastAPI server or API credentials are involved in this path.
 `tests/test_sample_trip_app.py` clicks the real button in Streamlit's test runner
 with socket connections blocked and checks the trip and warning labels.
+
+## Checkpoint 12: follow one browser submission
+
+1. `frontend/app.py`: `live_tab()` collects structured input; `request_plan()`
+   sends a single POST when the user clicks **Generate plan**.
+2. `backend/main.py`: `PlanRequest` validates the request and maps the fixed route
+   to `TripPreferences`. `generate_plan()` creates an isolated provider session
+   and passes the fields as `request_patch` into the existing graph. It loads keys
+   only after validation. No natural-language intake call is needed for the form.
+3. `backend/plan_view.py`: selects the offers by the itinerary's recommendation
+   IDs, attaches dates and place names, omits unresolved schedules and exposes
+   warnings. The same `show_trip()` renders both sample and live views.
+
+`tests/test_plan_app.py` exercises the form, local API and real graph together
+with intercepted provider responses, plus validation and rate-limit behavior.
