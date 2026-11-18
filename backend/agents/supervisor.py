@@ -105,13 +105,23 @@ class Supervisor:
         self.model = model
         self.timezone = ZoneInfo(timezone)
 
-    def __call__(self, message: str, current: TripPreferences) -> SupervisorTurn:
+    def __call__(self, message: str, current: TripPreferences, *, chat_question: str | None = None,
+                 browser_chat: bool = False) -> SupervisorTurn:
         if not message.strip():
             raise ModelCallError("Please provide a travel request.")
         context = {"today": datetime.now(self.timezone).date().isoformat(),
                    "timezone": str(self.timezone), "current_preferences": current.model_dump(mode="json")}
+        prompt = SYSTEM_PROMPT
+        if browser_chat:
+            context["pending_question"] = chat_question
+            prompt += ("\nBrowser chat is a Delhi–Jaipur round trip in INR. Use existing trip fields and "
+                       "the pending question to interpret short replies. For a change like 'cheaper hotel' "
+                       "without an amount, ask for a new nightly cap; do not change trip budget or other offers. "
+                       "If requested changes conflict with keeping an existing choice, ask what to prioritize. "
+                       "Once a clarification is answered and no more details are needed, use null for "
+                       "clarification_question so planning can proceed.")
         result = invoke_structured(self.model, SupervisorDecision,
-            [SystemMessage(content=SYSTEM_PROMPT + "\nContext: " + json.dumps(context)),
+            [SystemMessage(content=prompt + "\nContext: " + json.dumps(context)),
              HumanMessage(content=message)])
         decision = SupervisorDecision.model_validate(result.parsed)
         try:

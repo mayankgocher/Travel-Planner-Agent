@@ -1,7 +1,10 @@
 """Loopback FastAPI entry point for one explicit planning submission."""
 import logging
+from collections import OrderedDict
 from datetime import date, datetime
+from threading import Lock
 from typing import Annotated, Literal
+from uuid import UUID, uuid4
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -10,6 +13,8 @@ from fastapi import FastAPI, HTTPException
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import Field, model_validator
 
+from backend.agents.supervisor import Supervisor
+from backend.chat import TripChat
 from backend.config import Settings
 from backend.llm import create_model
 from backend.plan_view import plan_view
@@ -46,7 +51,7 @@ class PlanRequest(DomainModel):
                                interests=["history"], pace="relaxed", **self.model_dump())
 
 
-app = FastAPI(title="Travel Planning Agent", version="0.12.0")
+app = FastAPI(title="Travel Planning Agent", version="0.13.0")
 logger = logging.getLogger(__name__)
 
 
@@ -67,33 +72,99 @@ def redact(value, secrets: list[str]):
     return value
 
 
-@app.post("/plan")
-def generate_plan(request: PlanRequest):
-    """Each submission gets an isolated graph, with no provider calls at startup."""
-    preferences = request.preferences()
-    providers_needed = ["groq", "serpapi"]
-    if preferences.transport_mode in ("train", "compare"):
-        providers_needed.append("railradar")
+def planner_settings() -> Settings:
     try:
         # The browser demo explicitly uses assumed rail prices.
         settings = Settings(train_fare_mode="mock")
     except ValueError:
         raise HTTPException(503, "Check the server's local .env configuration.") from None
-    try:
-        keys = [settings.require_provider_key(provider) for provider in providers_needed]
-    except ValueError as error:
-        raise HTTPException(503, str(error)) from None  # Fixed config message, no value.
     if settings.groq_model != "openai/gpt-oss-120b":
         raise HTTPException(503, "Set GROQ_MODEL to openai/gpt-oss-120b for this checkpoint.")
+    return settings
 
+
+def require_keys(settings, *providers):
     try:
-        with httpx.Client(timeout=45) as http, TravelProviderSession(settings, jaipur_probe_bindings()) as service:
-            graph = build_provider_workflow(create_model(settings, http_client=http), InMemorySaver(), service)
-            config = {"configurable": {"thread_id": "plan"}, "recursion_limit": 30}
-            # Structured form fields are already validated; no Supervisor parsing call.
-            state = graph.invoke({"request_patch": preferences.model_dump(mode="json")}, config)
-        return redact(plan_view(state, preferences), sorted({v for k in keys for v in (k, quote(k, safe=""))},
-                                                          key=len, reverse=True))
+        for provider in providers:
+            settings.require_provider_key(provider)
+    except ValueError as error:
+        raise HTTPException(503, str(error)) from None  # Fixed config message, no value.
+
+
+def redact_result(data, settings):
+    secrets = set()
+    for name in ("groq_api_key", "serpapi_api_key", "railradar_api_key"):
+        key = getattr(settings, name).get_secret_value().strip()
+        if key:
+            secrets.update((key, quote(key, safe="")))
+    return redact(data, sorted(secrets, key=len, reverse=True))
+
+
+def run_workflow(settings, model, preferences, seed=None):
+    needed = ["serpapi"]
+    if preferences.transport_mode in ("train", "compare"):
+        needed.append("railradar")
+    require_keys(settings, *needed)
+    with TravelProviderSession(settings, jaipur_probe_bindings()) as service:
+        graph = build_provider_workflow(model, InMemorySaver(), service)
+        config = {"configurable": {"thread_id": "plan"}, "recursion_limit": 30}
+        return graph.invoke((seed or {}) | {"request_patch": preferences.model_dump(mode="json")}, config)
+
+
+@app.post("/plan")
+def generate_plan(request: PlanRequest):
+    """Structured form kept as a secondary way to use the same workflow."""
+    preferences = request.preferences()
+    settings = planner_settings()
+    require_keys(settings, "groq")
+    try:
+        with httpx.Client(timeout=45) as http:
+            result = run_workflow(settings, create_model(settings, http_client=http), preferences)
+        return redact_result(plan_view(result, preferences), settings)
+    except HTTPException:
+        raise
     except Exception as error:
         logger.error("Local planning failed (%s)", type(error).__name__)
         raise HTTPException(500, "Planning stopped before a result could be displayed.") from None
+
+
+class ChatRequest(DomainModel):
+    message: Annotated[str, Field(min_length=1, max_length=2000)]
+    session_id: UUID | None = None
+
+
+# Local single-user demo: serialize turns and keep only the latest state of up to
+# 16 chats. This is not durable storage or a cross-session search cache.
+chats: OrderedDict[UUID, TripChat] = OrderedDict()
+chat_lock = Lock()
+
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+    with chat_lock:
+        session_id = request.session_id or uuid4()
+        session = chats.get(session_id)
+        if request.session_id and session is None:
+            raise HTTPException(404, "This chat expired. Start a new chat.")
+        session = session or TripChat()
+        settings = planner_settings()
+        require_keys(settings, "groq")
+        try:
+            with httpx.Client(timeout=45) as http:
+                model = create_model(settings, http_client=http)
+                supervisor = Supervisor(model, settings.app_timezone)
+
+                def run(preferences, seed):
+                    return run_workflow(settings, model, preferences, seed)
+
+                result = session.respond(request.message, supervisor, run)
+        except HTTPException:
+            raise
+        except Exception as error:
+            logger.error("Local chat planning failed (%s)", type(error).__name__)
+            raise HTTPException(500, "The chat turn stopped before a result could be displayed.") from None
+        chats[session_id] = session
+        chats.move_to_end(session_id)
+        if len(chats) > 16:
+            chats.popitem(last=False)
+        return redact_result(result, settings) | {"session_id": str(session_id)}

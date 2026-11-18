@@ -1,12 +1,12 @@
 # Multi-agent travel planner
 
-Checkpoint 12 — local Streamlit and FastAPI planning demo, 6 November 2026.
+Checkpoint 13 — interactive Streamlit chat and Markdown download, 6 November 2026.
 
 **This is not yet a complete travel application.** The same four agents can now
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. The local
-Streamlit demo shows a saved result and can request a fresh Delhi/Jaipur plan.
-General location selection, weather, locks, product versions and export remain pending. Train prices
+Streamlit demo has a trip chat, a saved result, and a secondary planning form.
+General location selection, weather, locks and product versions remain pending. Train prices
 default to labelled deterministic assumptions; real rail fare access is still restricted. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
@@ -40,9 +40,9 @@ travel-provider request. Checkpoint 11 uses that saved result. It does not refre
 any quotes, schedules or hours.
 Dependencies are unchanged.
 
-## Generate a live plan from the browser
+## Plan a trip in the browser chat
 
-Install `Travel_Project_Checkpoint_12.zip` using `INSTALL_CHECKPOINT_12.ps1` from
+Install `Travel_Project_Checkpoint_13.zip` using `INSTALL_CHECKPOINT_13.ps1` from
 an extracted staging folder. The installer preserves `.env`, the venv, and reports.
 Open two PowerShell terminals in the project root. Start FastAPI in the first:
 
@@ -51,19 +51,25 @@ $env:GROQ_MODEL = "openai/gpt-oss-120b"
 .\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Start Streamlit in the second using the command below. Open the printed URL,
-choose **Live planning**, and click **Generate plan** once. This spends provider
-quota only on submission. The browser demo is a fixed Delhi → Jaipur round trip
-with 1–7 nights and up to 6 adults. The form supports train, flight, or comparison;
-it uses existing filters and ranking. Rail fares are explicitly demo amounts.
-The existing server-side Groq and SerpApi keys are required; rail also needs
-RailRadar. The API rejects invalid dates or price ranges before loading keys.
-`GET /health` checks startup without contacting providers.
+Start Streamlit in the second using the command below and open **Trip chat**.
+For example, send: `I want a Delhi to Jaipur round trip for 2 adults by CC train.
+Find a 3-star hotel with guest rating 4.2 or higher.` Reply with your future dates
+when asked. Once you have a plan, try `Keep the trains, but find a cheaper hotel.`
+Supply the new nightly cap when asked. The existing trains and place candidates
+are reused when the hotel price cap is the only change.
 
-The validated form fields go straight to graph state. The Supervisor node remains
-in the workflow but skips natural-language extraction for this structured input.
-If a provider or model stops the plan, the screen can still show available offers
-and warnings. The server does not display raw diagnostics or generated notes.
+The browser scope remains Delhi → Jaipur, INR, 1–7 nights, and up to 6 adults.
+Chat uses Groq to interpret each message; clarification and preference questions
+don't search travel providers. A ready trip needs SerpApi, and rail needs RailRadar.
+Rail fares are demo amounts. Chat memory lives in one FastAPI process and expires
+on restart or when an older session is evicted. **New chat** starts a fresh trip.
+It does not load the saved demo into the current chat.
+
+**Download plan** saves the displayed result and its caveats as Markdown without
+another API call. **Live planning form** is still available as a secondary route;
+it submits structured fields directly. **Saved sample** works offline. A failed
+chat revision keeps the previous usable plan visible. No raw provider diagnostics
+or generated itinerary notes are displayed. `GET /health` uses no provider quota.
 
 ## Open the saved-trip demo
 

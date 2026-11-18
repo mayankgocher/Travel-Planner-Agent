@@ -388,3 +388,21 @@ or cross-request search cache in this demo.
 and warnings. It preserves source and quote provenance, strips generated notes
 and raw diagnostics, and omits unresolved schedules. Partial offers remain visible.
 The offline sample never sends the POST.
+
+## Checkpoint 13: conversation and export
+
+`POST /chat` uses a server-issued session ID. `backend/chat.py` keeps applied
+preferences, retained graph results, and pending answers separately. A message
+goes through the existing Supervisor agent, with the current preferences and
+latest unanswered question as context. Missing or ambiguous input asks a question
+without running travel searches. When inputs are ready, FastAPI seeds the existing
+graph with the previous applied result and a validated structured patch. The
+dependency table decides which workers run. Chat does not use LangGraph's native
+interrupt for intake; the CLI's existing interrupt path is unchanged.
+
+Only the latest state of each of up to 16 chat sessions is retained in memory.
+The local server serializes chat turns. It does not store a durable transcript
+or product versions; Streamlit keeps the visible transcript. A failed revision
+with no validated itinerary preserves the last usable displayed plan. New chat
+starts fresh; a server restart clears memory. Both servers are intended for loopback.
+The Streamlit Markdown export reads the already rendered plan only.

@@ -38,7 +38,7 @@ def test_browser_submit_runs_local_endpoint_and_existing_graph_once(monkeypatch)
         monkeypatch.setattr(httpx.Client, "post", browser_post)
         screen = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "frontend/app.py")).run()
         assert not screen.exception and not providers.calls
-        screen.button[0].click().run()
+        next(b for b in screen.button if b.label == "Load sample trip").click().run()
         assert not screen.exception and not providers.calls
         screen.date_input[0].set_value(date.fromisoformat(P["departure_date"]))
         screen.date_input[1].set_value(date.fromisoformat(P["return_date"]))

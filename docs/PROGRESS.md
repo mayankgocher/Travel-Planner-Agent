@@ -291,26 +291,44 @@ Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Iti
   200 on their health endpoints. No live provider calls were made. The Windows
   browser live submission still needs verification.
 
+## Checkpoint 13: trip chat and Markdown
+
+- User verified the Checkpoint 12 live browser train flow: outbound and return
+  trains, a hotel quote, and eight planned activities. An earlier request hit
+  Groq's rate limit; the later successful run was after restarting FastAPI.
+- The primary Streamlit tab is now conversational. `POST /chat` uses the same
+  Supervisor and remembers pending answers and applied planning state. It asks
+  about missing details and applies complete changes through the graph. Hotel-only
+  changes reuse trains and place candidates; a failed revision can retain the
+  previous usable plan. Browser scope stays fixed Delhi/Jaipur. No permanent locks,
+  database or multi-city routing is introduced by this checkpoint.
+- Markdown download uses the displayed result, including demo fare, incomplete
+  quote, opening-hours and budget caveats. No model or provider calls on download.
+- All 249 offline tests passed on Linux Python 3.12 (9.57 seconds). No live
+  provider calls were made. Windows chat verification is pending. Tests simulate the complete chat
+  interaction and check travel call counts, route guard, previous plan retention,
+  expired session handling and export disclosures.
+
 ## Next actions
 
-1. Install Checkpoint 12 preserving .env/venv. Start FastAPI and Streamlit using
+1. Install Checkpoint 13 preserving .env/venv. Restart FastAPI and Streamlit using
    the two README commands.
-2. Submit one live train plan from the browser and verify transport, hotel,
-   itinerary and warnings. No extra CLI run is needed. Offline mode is still
-   available through **Load sample trip**.
+2. Test one chat: start with train/class/adults but no dates, answer the
+   clarification, ask for a hotel-only change, and download the displayed plan.
+   Offline mode is still available through **Load sample trip**.
 3. Add general location candidate discovery/selection and optional daily weather,
    retaining ambiguity and out-of-horizon warnings. The fixed probe is not general
    city coverage. Keep verified schedule and assumed price provenance separate.
 4. Add selection/locks, serialized trip lifecycle, numbered view-only snapshots,
    stale-update rejection and last-successful-plan preservation.
-5. Add final Supervisor explanation, Markdown download,
+5. Add final Supervisor explanation and layout polish,
    representative evaluations/full live user journeys and owner learning guide.
 
 ## Still pending in agreed scope
 
 Weather, general location selection,
 user selection controls/locks, durable application lifecycle, plan snapshots,
-export and systematic evaluation. Graph checkpoints are not
+systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.
 
 ## Preserve decisions

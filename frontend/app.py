@@ -3,22 +3,17 @@
 import json
 import re
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
 from pathlib import Path
 
 import httpx
 import streamlit as st
 
+from frontend.plan_export import money, plan_markdown
+
 
 SAMPLE = Path(__file__).with_name("jaipur_sample.json")
 PLAN_URL = "http://127.0.0.1:8000/plan"
-
-
-def money(amount, currency="INR") -> str:
-    if amount is None:
-        return "Unverified"
-    symbol = "₹" if currency == "INR" else f"{currency} "
-    return symbol + f"{Decimal(amount):,.2f}".removesuffix(".00")
+CHAT_URL = "http://127.0.0.1:8000/chat"
 
 
 def day_label(day: str) -> str:
@@ -96,7 +91,7 @@ def show_itinerary(days: list[dict]) -> None:
             st.markdown(f"- {activity['start']}–{activity['end']} · {name}{notice}")
 
 
-def show_trip(plan: dict) -> None:
+def show_trip(plan: dict, *, panel: str) -> None:
     trip = plan["trip"]
     st.header(f"{trip['origin']} → {trip['destination']}")
     st.write(f"{day_label(trip['departure_date'])} to {day_label(trip['return_date'])} · {trip['adults']} adults")
@@ -105,6 +100,8 @@ def show_trip(plan: dict) -> None:
     elif plan["status"] not in ("draft_ready", "draft_ready_with_warnings"):
         st.warning("This request returned an incomplete draft or needs review.")
 
+    st.download_button("Download plan", plan_markdown(plan), file_name=f"travel-plan-{trip['departure_date']}.md",
+                       mime="text/markdown", on_click="ignore", key=f"{panel}_download")
     costs = plan.get("costs") or {}
     if trip["budget_total"] is not None:
         st.write(f"Target budget: {money(trip['budget_total'], trip['currency'])}")
@@ -147,8 +144,7 @@ def show_trip(plan: dict) -> None:
                          "serpapi_google_flights": "Google Flights via SerpApi"}.get(source["provider"], source["provider"])
                 st.text(f"{label} · Fetched {source['fetched_at']}")
                 if url := source.get("url"):
-                    prefix = "sample" if "snapshot_date" in plan else "live"
-                    st.link_button(f"Open {label} source", url, key=f"{prefix}_source_{index}")
+                    st.link_button(f"Open {label} source", url, key=f"{panel}_source_{index}")
 
 
 def sample_tab() -> None:
@@ -162,13 +158,13 @@ def sample_tab() -> None:
     except (OSError, ValueError):
         st.error("The saved sample could not be loaded. Re-extract the checkpoint files and try again.")
         return
-    show_trip(sample)
+    show_trip(sample, panel="sample")
 
 
-def request_plan(payload: dict) -> dict:
+def request_plan(payload: dict, url=PLAN_URL) -> dict:
     # A slow provider may take a while. Do not retry a potentially billable POST.
     with httpx.Client(timeout=httpx.Timeout(480, connect=3), trust_env=False) as client:
-        response = client.post(PLAN_URL, json=payload)
+        response = client.post(url, json=payload)
         response.raise_for_status()
         return response.json()
 
@@ -223,13 +219,56 @@ def live_tab() -> None:
                 st.error("Could not read a planning result. Check the backend terminal.")
 
     if result := st.session_state.get("live_result"):
-        show_trip(result)
+        show_trip(result, panel="form")
+
+
+def chat_tab() -> None:
+    st.caption("Delhi → Jaipur round trip · Tell me your dates, group size, and how you want to travel.")
+    if st.button("New chat"):
+        for field in ("chat_id", "chat_messages", "chat_plan", "turn_warnings"):
+            st.session_state.pop(field, None)
+    messages = st.session_state.setdefault("chat_messages", [])
+    for role, message in messages:
+        with st.chat_message(role):
+            st.text(message)
+    prompt = st.chat_input("Describe your trip or ask for a change", max_chars=2000)
+    if prompt and prompt.strip():
+        messages.append(("user", prompt))
+        with st.chat_message("user"):
+            st.text(prompt)
+        with st.chat_message("assistant"):
+            try:
+                with st.spinner("Working on your trip…"):
+                    data = request_plan({"message": prompt, "session_id": st.session_state.get("chat_id")}, CHAT_URL)
+                st.session_state["chat_id"] = data["session_id"]
+                st.session_state["chat_plan"] = data["plan"]
+                st.session_state["turn_warnings"] = data.get("turn_warnings", [])
+                reply = data["reply"]
+            except httpx.HTTPStatusError as error:
+                reply = {
+                    404: "This chat is unavailable or expired. Check that FastAPI was restarted after installation, then click New chat.",
+                    503: "Check the API settings in your local .env.",
+                }.get(error.response.status_code, "The backend couldn't complete that message.")
+            except httpx.ConnectError:
+                reply = "Start FastAPI on port 8000, then send your message again."
+            except (httpx.HTTPError, ValueError):
+                reply = "No reply was received. The server may already have used quota; check its terminal before retrying."
+            messages.append(("assistant", reply))
+            st.text(reply)
+    if warnings := st.session_state.get("turn_warnings"):
+        with st.expander("Latest revision warnings", expanded=True):
+            for warning in warnings:
+                st.text(warning)
+    if plan := st.session_state.get("chat_plan"):
+        show_trip(plan, panel="chat")
 
 
 def main() -> None:
     st.set_page_config(page_title="Travel Planning Agent", page_icon="🧳", layout="centered")
     st.title("Travel Planning Agent")
-    saved, live = st.tabs(["Saved sample", "Live planning"])
+    chat, saved, live = st.tabs(["Trip chat", "Saved sample", "Live planning form"])
+    with chat:
+        chat_tab()
     with saved:
         sample_tab()
     with live:

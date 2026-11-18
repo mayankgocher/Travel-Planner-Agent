@@ -486,3 +486,15 @@ with socket connections blocked and checks the trip and warning labels.
 
 `tests/test_plan_app.py` exercises the form, local API and real graph together
 with intercepted provider responses, plus validation and rate-limit behavior.
+
+## Checkpoint 13: follow one chat conversation
+
+1. `frontend/app.py`: `chat_tab()` sends the message and session ID to `/chat`.
+2. `backend/main.py`: FastAPI finds the session, creates a model client for this
+   turn and asks `TripChat.respond()` to interpret the message.
+3. `backend/chat.py`: the Supervisor proposes preference updates. Python checks
+   the fixed route and required fields. A question saves pending input; it leaves
+   the applied plan untouched. A complete update goes to LangGraph along with
+   the prior result. See `backend/services/replanning.py` for the dependency table.
+4. The existing `plan_view()` supplies the result. `frontend/plan_export.py`
+   converts the displayed view to Markdown; the download doesn't run an agent.

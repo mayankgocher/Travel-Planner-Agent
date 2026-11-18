@@ -19,7 +19,7 @@ def test_load_saved_jaipur_trip(monkeypatch):
     assert not screen.exception
     assert not screen.header
 
-    screen.button[0].click().run()
+    next(b for b in screen.button if b.label == "Load sample trip").click().run()
     assert not screen.exception
     assert screen.header[0].value == "Delhi → Jaipur"
     text = "\n".join(item.value for item in screen.markdown)
