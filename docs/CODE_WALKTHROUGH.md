@@ -498,3 +498,12 @@ with intercepted provider responses, plus validation and rate-limit behavior.
    the prior result. See `backend/services/replanning.py` for the dependency table.
 4. The existing `plan_view()` supplies the result. `frontend/plan_export.py`
    converts the displayed view to Markdown; the download doesn't run an agent.
+
+## When Groq returns an unknown or repeated place ID
+
+`backend/services/scheduling.py` reports unknown and repeated IDs separately.
+`backend/agents/itinerary.py` gives Groq one correction. If it still fails, Python
+can remove unknown visits and keep the first visit to each repeated ID. The
+remaining visits keep their original times. The app only displays a shortened
+schedule if it has at least one activity and passes the same full validator.
+Users see a warning when visits were omitted.

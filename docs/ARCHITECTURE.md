@@ -406,3 +406,10 @@ or product versions; Streamlit keeps the visible transcript. A failed revision
 with no validated itinerary preserves the last usable displayed plan. New chat
 starts fresh; a server restart clears memory. Both servers are intended for loopback.
 The Streamlit Markdown export reads the already rendered plan only.
+
+### Itinerary place ID patch
+
+The scheduling validator distinguishes IDs outside the candidate list from
+repeated visits to the same ID. After one model correction, Python can omit
+those rows and revalidate a nonempty schedule. No additional model call or
+provider lookup is needed for that step. Remaining conflicts still block display.

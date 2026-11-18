@@ -2,6 +2,10 @@
 
 Checkpoint 13 — interactive Streamlit chat and Markdown download, 6 November 2026.
 
+Itinerary patch: after the existing one correction, a draft with unknown or
+repeated place IDs can be shortened if at least one visit survives and the
+shortened schedule passes every check. The app discloses what it omitted.
+
 **This is not yet a complete travel application.** The same four agents can now
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. The local

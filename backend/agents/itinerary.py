@@ -5,7 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.llm import invoke_structured
 from backend.schemas import HotelOffer, PlaceCandidate, TransportOffer, TripPreferences
 from backend.services.offer_filters import transport_leg
-from backend.services.scheduling import Schedule, validate_schedule
+from backend.services.scheduling import Schedule, omit_invalid_place_ids, validate_schedule
 from backend.providers.results import unpack_search
 from backend.services.hotel_dates import stay_preferences
 
@@ -61,8 +61,21 @@ class ItineraryAgent:
             warnings = search_warnings + warnings
             if not errors or attempt == 1:
                 break
-            messages.append(HumanMessage(content="Correct this draft once. Preserve the supplied offers/place IDs. "
+            messages.append(HumanMessage(content="Correct this draft once. Use only IDs from the original place list. "
+                "Remove unknown IDs and keep at most one visit per place. "
                 + json.dumps({"draft": schedule.model_dump(), "validation_errors": errors})))
+        if errors:
+            trimmed, unknown, repeats = omit_invalid_place_ids(schedule, places)
+            if (unknown or repeats) and trimmed.activities:
+                remaining_errors, remaining_warnings = validate_schedule(
+                    trimmed, places, outward, returning, p, self.timezone,
+                )
+                if not remaining_errors:
+                    schedule, errors = trimmed, remaining_errors
+                    warnings = search_warnings + remaining_warnings + [
+                        "Itinerary shortened by omitting visits "
+                        f"(unknown place IDs: {unknown}; repeated place IDs: {repeats})."
+                    ]
         synthetic = all(o.source.synthetic for o in [outward, returning, hotel, *places])
         if any(o.source.synthetic != synthetic for o in [outward, returning, hotel, *places]):
             raise ValueError("Synthetic and live evidence cannot be mixed")

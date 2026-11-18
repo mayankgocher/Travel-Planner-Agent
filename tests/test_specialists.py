@@ -56,6 +56,17 @@ def run_agents(fault=None, assumed_fares=False):
             answer = {"activities": [{"place_id": "FIXTURE-P1", "date": "2027-02-10",
                                       "start": "08:00" if bad else "15:00", "end": "09:00" if bad else "16:00"}],
                       "notes": ["Synthetic data. Transfer time is an estimate."]}
+            if fault in {"repeat_id", "unknown_id", "only_unknown_id", "unknown_with_bad_timing"}:
+                visit = answer["activities"][0]
+                extra = visit | {"start": "16:30", "end": "17:30"}
+                if fault != "repeat_id":
+                    extra["place_id"] = "MADE-UP"
+                if fault == "only_unknown_id":
+                    answer["activities"] = [extra]
+                else:
+                    answer["activities"].append(extra)
+                if fault == "unknown_with_bad_timing":
+                    visit.update(start="08:00", end="09:00")
         else:
             raise AssertionError("Unexpected model request")
         return httpx.Response(200, json={"id": "fixture", "object": "chat.completion", "created": 1,
@@ -113,6 +124,33 @@ def test_unresolved_conflict_is_visible_and_correction_is_bounded():
     result, calls = run_agents("always_bad")
     assert calls.count("Schedule") == 2
     assert result["status"] == "draft_needs_review" and result["itinerary"]["validation_errors"]
+
+
+@pytest.mark.parametrize(("fault", "omissions"), [
+    ("unknown_id", "unknown place IDs: 1; repeated place IDs: 0"),
+    ("repeat_id", "unknown place IDs: 0; repeated place IDs: 1"),
+])
+def test_shortened_schedule_preserves_the_valid_visit(fault, omissions):
+    result, calls = run_agents(fault)
+    assert calls.count("Schedule") == 2
+    assert result["status"] == "draft_ready_with_warnings"
+    itinerary = result["itinerary"]
+    assert itinerary["activities"] == [{"place_id": "FIXTURE-P1", "date": "2027-02-10",
+                                        "start": "15:00", "end": "16:00"}]
+    assert not itinerary["validation_errors"]
+    assert any("Itinerary shortened" in warning and omissions in warning for warning in result["warnings"])
+
+
+@pytest.mark.parametrize("fault", ["only_unknown_id", "unknown_with_bad_timing"])
+def test_omission_cannot_publish_an_empty_schedule_or_bypass_timing(fault):
+    result, calls = run_agents(fault)
+    assert calls.count("Schedule") == 2
+    assert result["status"] == "draft_needs_review"
+    errors = result["itinerary"]["validation_errors"]
+    assert "Unknown place ID: MADE-UP" in errors
+    if fault == "unknown_with_bad_timing":
+        assert any("arrival/departure buffer" in error for error in errors)
+    assert not any("Itinerary shortened" in warning for warning in result["warnings"])
 
 
 def test_unknown_ranking_id_stops_further_model_work():

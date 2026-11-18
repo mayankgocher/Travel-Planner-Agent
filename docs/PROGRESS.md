@@ -324,6 +324,14 @@ Updated 4 November 2026. Checkpoint 10 recovery revision: resume only failed Iti
 5. Add final Supervisor explanation and layout polish,
    representative evaluations/full live user journeys and owner learning guide.
 
+## Checkpoint 13 itinerary place ID patch
+
+If the scheduling model still returns unknown or repeated IDs after one
+correction, try omitting those rows and revalidate the remaining visits.
+Even after omission, empty schedules and timing conflicts still need review.
+All 253 offline tests passed under Python 3.12 on Linux, including four added
+regression cases. The patch has not been tested against live providers.
+
 ## Still pending in agreed scope
 
 Weather, general location selection,

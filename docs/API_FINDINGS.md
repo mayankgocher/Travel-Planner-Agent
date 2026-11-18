@@ -302,3 +302,10 @@ schedule correction and no remaining timing violations. Nine activities were
 scheduled, six with unverified opening hours. The generated weekday note was
 inconsistent with the schedule and is omitted from the sample screen. The hotel
 quote remains incomplete and the assumed train fares cannot establish budget fit.
+
+## Checkpoint 13 itinerary place ID patch
+
+A live Streamlit report reached schedule validation with an unknown-or-repeated
+place ID. The old combined message cannot distinguish the two cases. The patch
+was verified with intercepted model responses for both cases; no provider calls
+were made to verify the patch.

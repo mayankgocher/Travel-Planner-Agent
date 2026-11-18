@@ -20,6 +20,22 @@ class Schedule(BaseModel):
     notes: list[str]
 
 
+def omit_invalid_place_ids(schedule, places):
+    """Keep the first visit to each supplied place, without changing any times."""
+    known = {place.id for place in places}
+    seen, activities = set(), []
+    unknown = repeats = 0
+    for activity in schedule.activities:
+        if activity.place_id not in known:
+            unknown += 1
+        elif activity.place_id in seen:
+            repeats += 1
+        else:
+            seen.add(activity.place_id)
+            activities.append(activity)
+    return Schedule(activities=activities, notes=[]), unknown, repeats
+
+
 def validate_schedule(schedule, places, outward, returning, p, timezone):
     errors, warnings, intervals, seen = [], [], [], set()
     known = {place.id: place for place in places}
@@ -30,8 +46,11 @@ def validate_schedule(schedule, places, outward, returning, p, timezone):
     if not schedule.activities:
         errors.append("Schedule must contain an activity from the supplied candidates.")
     for activity in schedule.activities:
-        if activity.place_id not in known or activity.place_id in seen:
-            errors.append("Unknown or repeated place ID: " + activity.place_id)
+        if activity.place_id not in known:
+            errors.append("Unknown place ID: " + activity.place_id)
+            continue
+        if activity.place_id in seen:
+            errors.append("Repeated place ID: " + activity.place_id)
             continue
         seen.add(activity.place_id)
         try:
