@@ -28,8 +28,16 @@ P = dict(origin="Delhi", destination="Jaipur", departure_date="2027-02-10", retu
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
     def forbidden(*a, **k): raise AssertionError("Connected tests cannot access real sockets")
-    monkeypatch.setattr(socket.socket, "connect", forbidden)
-    monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
+    # Allow Windows asyncio's local socket pair; block external connections.
+    for method in ("connect", "connect_ex"):
+        original = getattr(socket.socket, method)
+
+        def local_only(sock, address, original=original):
+            if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
+                return original(sock, address)
+            return forbidden(sock, address)
+
+        monkeypatch.setattr(socket.socket, method, local_only)
     for key in list(os.environ):
         if key.lower().endswith("_proxy"): monkeypatch.delenv(key)
 

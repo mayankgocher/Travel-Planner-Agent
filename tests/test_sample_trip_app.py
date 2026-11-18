@@ -13,8 +13,16 @@ def test_load_saved_jaipur_trip(monkeypatch):
     def reject_connection(*args, **kwargs):
         raise AssertionError("The saved demo must not make network calls")
 
-    monkeypatch.setattr(socket.socket, "connect", reject_connection)
-    monkeypatch.setattr(socket.socket, "connect_ex", reject_connection)
+    # Allow Windows asyncio's local socket pair; block external connections.
+    for method in ("connect", "connect_ex"):
+        original = getattr(socket.socket, method)
+
+        def local_only(sock, address, original=original):
+            if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
+                return original(sock, address)
+            return reject_connection(sock, address)
+
+        monkeypatch.setattr(socket.socket, method, local_only)
     screen = AppTest.from_file(str(APP)).run()
     assert not screen.exception
     assert not screen.header
