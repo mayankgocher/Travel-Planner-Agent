@@ -357,6 +357,21 @@ regression cases. The patch has not been tested against live providers.
   can verify that “by CC train” no longer prompts for the class when all other
   required details are present. No new dependencies, API keys or route changes.
 
+### Checkpoint 14 itinerary transfer buffer patch
+
+- A Windows live chat recognized “by CC train” immediately, found rail and hotel
+  options, but the Itinerary Agent's draft failed the 30-minute transfer gap.
+- After one model correction, Python can omit conflicting visits if that is the
+  only remaining scheduling error. Dates, visit times, transport and lodging
+  are left alone. The usual validator approves the shortened schedule, and the
+  app shows how many visits were dropped.
+- All 272 tests passed on Linux Python 3.12 (offline). Cases cover overlapping
+  visits, too-short gaps, a gap of exactly 30 minutes, a mixed unknown-ID
+  conflict, and a known opening-hours error that still blocks the draft.
+- Install over Checkpoint 14 with the previous patches applied, rerun pytest,
+  and restart FastAPI. A live rerun is optional; no existing trip data or
+  provider settings require changes.
+
 ## Still pending in agreed scope
 
 Weather, open-ended location discovery,

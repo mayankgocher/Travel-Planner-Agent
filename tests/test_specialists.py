@@ -67,6 +67,20 @@ def run_agents(fault=None, assumed_fares=False):
                     answer["activities"].append(extra)
                 if fault == "unknown_with_bad_timing":
                     visit.update(start="08:00", end="09:00")
+            if fault in {"overlap", "tight_gap", "exact_gap", "overlap_and_unknown", "overlap_and_closed"}:
+                ranges = {
+                    "overlap": [("10:00", "16:00"), ("10:40", "11:40"), ("12:10", "13:10")],
+                    "tight_gap": [("10:00", "11:00"), ("11:20", "12:20"), ("11:30", "12:30")],
+                    "exact_gap": [("10:00", "11:00"), ("11:30", "12:30"), ("13:00", "14:00")],
+                    "overlap_and_unknown": [("10:00", "11:00"), ("10:30", "11:30"), ("12:00", "13:00")],
+                    "overlap_and_closed": [("08:30", "10:00"), ("09:30", "11:00"), ("12:00", "13:00")],
+                }[fault]
+                answer["activities"] = [
+                    dict(place_id=f"FIXTURE-P{n}", date="2027-02-11", start=start, end=end)
+                    for n, (start, end) in enumerate(ranges, start=1)
+                ]
+                if fault == "overlap_and_unknown":
+                    answer["activities"][-1]["place_id"] = "MADE-UP"
         else:
             raise AssertionError("Unexpected model request")
         return httpx.Response(200, json={"id": "fixture", "object": "chat.completion", "created": 1,
@@ -151,6 +165,37 @@ def test_omission_cannot_publish_an_empty_schedule_or_bypass_timing(fault):
     if fault == "unknown_with_bad_timing":
         assert any("arrival/departure buffer" in error for error in errors)
     assert not any("Itinerary shortened" in warning for warning in result["warnings"])
+
+
+@pytest.mark.parametrize(("fault", "kept"), [
+    ("overlap", [("FIXTURE-P2", "10:40", "11:40"), ("FIXTURE-P3", "12:10", "13:10")]),
+    ("tight_gap", [("FIXTURE-P1", "10:00", "11:00"), ("FIXTURE-P3", "11:30", "12:30")]),
+    ("overlap_and_unknown", [("FIXTURE-P1", "10:00", "11:00")]),
+])
+def test_unresolved_activity_conflicts_keep_valid_visits_at_original_times(fault, kept):
+    result, calls = run_agents(fault)
+    itinerary = result["itinerary"]
+    assert calls.count("Schedule") == 2
+    assert result["status"] == "draft_ready_with_warnings"
+    assert [(a["place_id"], a["start"], a["end"]) for a in itinerary["activities"]] == kept
+    assert not itinerary["validation_errors"]
+    assert any("Visits omitted to keep a 30-minute gap between activities: 1." in w for w in result["warnings"])
+    if fault == "overlap_and_unknown":
+        assert any("unknown place IDs: 1" in w for w in result["warnings"])
+
+
+def test_exact_transfer_buffer_keeps_the_whole_schedule_without_correction():
+    result, calls = run_agents("exact_gap")
+    assert calls.count("Schedule") == 1
+    assert result["status"] == "draft_ready" and len(result["itinerary"]["activities"]) == 3
+
+
+def test_a_closing_hours_error_still_blocks_a_schedule_with_a_short_gap():
+    result, calls = run_agents("overlap_and_closed")
+    assert calls.count("Schedule") == 2 and result["status"] == "draft_needs_review"
+    errors = result["itinerary"]["validation_errors"]
+    assert any("opening hours" in error for error in errors)
+    assert any("30-minute" in error for error in errors)
 
 
 def test_unknown_ranking_id_stops_further_model_work():

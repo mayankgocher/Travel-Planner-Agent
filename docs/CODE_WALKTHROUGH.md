@@ -530,3 +530,12 @@ no class already set. Alternatives and negated phrases are left to clarification
 A class-only question can be skipped when that same explicit class is already
 known; questions about other preferences still pause the plan. This adds no
 model or provider call.
+
+### Recover a schedule with overlapping visits
+
+After one model correction, `ItineraryAgent` still tries to remove unknown
+or repeated place IDs. If the only remaining error is the 30-minute gap
+between activities, `omit_transfer_conflicts()` keeps a compatible subset.
+It considers the earliest finishing visit first to leave room for later
+ones. It never changes times or adds places. The normal validator runs again
+before the shortened schedule can be shown, and the warning counts omissions.

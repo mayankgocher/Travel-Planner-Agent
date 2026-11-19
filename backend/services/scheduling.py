@@ -6,6 +6,10 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 
 
+TRANSFER_BUFFER = timedelta(minutes=30)
+TRANSFER_CONFLICT = "Activities overlap or have less than the estimated 30-minute transfer buffer."
+
+
 class Activity(BaseModel):
     model_config = ConfigDict(extra="forbid")
     place_id: str
@@ -36,6 +40,29 @@ def omit_invalid_place_ids(schedule, places):
     return Schedule(activities=activities, notes=[]), unknown, repeats
 
 
+def _activity_interval(activity: Activity, tz: ZoneInfo) -> tuple[datetime, datetime]:
+    # Activity strings represent destination-local times, never UTC by assumption.
+    day = datetime.strptime(activity.date, "%Y-%m-%d").date()
+    start = datetime.combine(day, datetime.strptime(activity.start, "%H:%M").time(), tz)
+    end = datetime.combine(day, datetime.strptime(activity.end, "%H:%M").time(), tz)
+    return start, end
+
+
+def omit_transfer_conflicts(schedule: Schedule, timezone: str) -> tuple[Schedule, int]:
+    """Keep the most compatible visits; call only when the transfer gap is the sole error."""
+    tz = ZoneInfo(timezone)
+    intervals = [(*_activity_interval(activity, tz), activity) for activity in schedule.activities]
+    # Choosing the visit that ends first leaves the most room for later visits.
+    intervals.sort(key=lambda interval: (interval[1], interval[0]))
+    kept = []
+    next_start = None
+    for start, end, activity in intervals:
+        if next_start is None or start >= next_start:
+            kept.append(activity)
+            next_start = end + TRANSFER_BUFFER
+    return Schedule(activities=kept, notes=[]), len(intervals) - len(kept)
+
+
 def validate_schedule(schedule, places, outward, returning, p, timezone):
     errors, warnings, intervals, seen = [], [], [], set()
     known = {place.id: place for place in places}
@@ -54,13 +81,11 @@ def validate_schedule(schedule, places, outward, returning, p, timezone):
             continue
         seen.add(activity.place_id)
         try:
-            # Activity strings represent destination-local times, never UTC by assumption.
-            day = datetime.strptime(activity.date, "%Y-%m-%d").date()
-            start = datetime.combine(day, datetime.strptime(activity.start, "%H:%M").time(), tz)
-            end = datetime.combine(day, datetime.strptime(activity.end, "%H:%M").time(), tz)
+            start, end = _activity_interval(activity, tz)
         except ValueError:
             errors.append("Invalid activity date/time format.")
             continue
+        day = start.date()
         if not (p.departure_date <= day <= p.return_date) or end <= start:
             errors.append("Activity outside trip dates or has invalid duration.")
         if start < outward.arrival + timedelta(hours=1) or end > returning.departure - timedelta(hours=1):
@@ -90,8 +115,8 @@ def validate_schedule(schedule, places, outward, returning, p, timezone):
                     errors.append("Activity outside known opening hours: " + activity.place_id)
         intervals.append((start, end))
     intervals.sort()
-    if any(later[0] < earlier[1] + timedelta(minutes=30) for earlier, later in zip(intervals, intervals[1:])):
-        errors.append("Activities overlap or have less than the estimated 30-minute transfer buffer.")
+    if any(later[0] < earlier[1] + TRANSFER_BUFFER for earlier, later in zip(intervals, intervals[1:])):
+        errors.append(TRANSFER_CONFLICT)
     limit = {"relaxed": 3, "balanced": 5, "busy": 7}.get(p.pace, 5)
     if any(count > limit for count in Counter(a.date for a in schedule.activities).values()):
         errors.append("Daily activity count exceeds the selected pace.")
