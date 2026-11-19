@@ -58,10 +58,10 @@ class RouteResponses(Responses):
             leg["departure_airport"]["time"] = day + (" 08:00" if outward else " 16:00")
             leg["arrival_airport"]["time"] = day + (" 10:00" if outward else " 18:00")
         elif url.host == "api.groq.com" and self.roles[-1] == "SupervisorDecision":
-            intent, fields = next(self.decisions)
+            intent, fields, *question = next(self.decisions)
             body["choices"][0]["message"]["content"] = json.dumps({
                 "intent": intent, "updates": [{"field": key, "value": value} for key, value in fields.items()],
-                "clarification_question": None, "answer": None,
+                "clarification_question": question[0] if question else None, "answer": None,
             })
         elif url.host == "api.groq.com" and self.roles[-1] == "Schedule":
             wire = json.loads(request.content)
@@ -150,6 +150,37 @@ def test_chat_asks_for_cities_and_replaces_old_searches_on_route_change(monkeypa
     assert_mysuru_trip(third["plan"], handler.calls[before_change:])
     names = [a["name"] for day in third["plan"]["days"] for a in day["activities"]]
     assert names == ["Invented Mysuru museum"]
+
+
+@pytest.mark.parametrize(("rail_preference", "model_question", "ready"), [
+    ("by CC train", None, True),
+    ("by cc train", "Which train class would you prefer?", True),
+    ("by CC train", "What is your maximum nightly hotel price?", False),
+    ("by train", None, False),
+    ("by CC train or by 3A train", None, False),
+    ("not by CC train", None, False),
+    ("but don't travel by CC train", None, False),
+])
+def test_chat_uses_an_explicit_class_without_guessing(rail_preference, model_question, ready, monkeypatch):
+    fields = DATES | {"origin": "Bengaluru", "destination": "Mysuru", "adults": 2, "transport_mode": "train"}
+    handler = RouteResponses([("plan", fields, model_question)])  # Model omitted train_class.
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as http:
+        bind_mock_http(monkeypatch, http)
+        response = TestClient(main.app).post("/chat", json={"message": (
+            f"Plan a Bengaluru to Mysuru round trip {rail_preference} for 2 adults. "
+            "Depart on 10 February 2027 and return on 13 February 2027."
+        )})
+    assert response.status_code == 200, response.text
+    reply = response.json()
+    if ready:
+        assert reply["plan"], reply["reply"]
+        assert_mysuru_trip(reply["plan"], handler.calls)
+        assert all(leg["travel_class"] == "CC" for leg in reply["plan"]["transport"])
+        assert handler.roles.count("SupervisorDecision") == 1
+    else:
+        assert reply["plan"] is None
+        assert reply["reply"] == (model_question or "Please provide: train class (e.g. CC).")
+        assert [r.url.host for r in handler.calls] == ["api.groq.com"]
 
 
 def test_flight_route_uses_bengaluru_airport_without_a_rail_search(monkeypatch):

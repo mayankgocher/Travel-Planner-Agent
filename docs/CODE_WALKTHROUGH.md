@@ -520,3 +520,13 @@ Users see a warning when visits were omitted.
    the return, and the other adapters use “Mysuru” for hotel and place queries.
 4. When the chat destination changes, the dependency table marks transport,
    hotels, places and itinerary stale. No Delhi/Jaipur results carry over.
+
+### An explicit train class in chat
+
+The Supervisor still interprets the message first. Before checking missing
+preferences, `TripChat.respond()` can fill an omitted class from a single
+explicit phrase such as “by CC train”. This applies only to a rail request with
+no class already set. Alternatives and negated phrases are left to clarification.
+A class-only question can be skipped when that same explicit class is already
+known; questions about other preferences still pause the plan. This adds no
+model or provider call.

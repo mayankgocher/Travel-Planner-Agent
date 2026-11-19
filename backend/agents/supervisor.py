@@ -121,6 +121,9 @@ class Supervisor:
                        "Do not guess or substitute a city. Use existing trip fields and "
                        "the pending question to interpret short replies. For a change like 'cheaper hotel' "
                        "without an amount, ask for a new nightly cap; do not change trip budget or other offers. "
+                       "Extract train_class=CC from a positive choice like 'by CC train'. "
+                       "Other explicit train-class codes include EC, 3A, 2A, 1A, and SL. "
+                       "If the only clarification is the train class, ask 'Which train class would you prefer?' "
                        "If requested changes conflict with keeping an existing choice, ask what to prioritize. "
                        "Once a clarification is answered and no more details are needed, use null for "
                        "clarification_question so planning can proceed.")

@@ -344,6 +344,19 @@ regression cases. The patch has not been tested against live providers.
   Compare returned station codes and disclosures; share only sanitized warnings
   if there is no validated plan. The legacy connected CLI remains fixed route.
 
+### Checkpoint 14 chat clarification patch
+
+- The Windows live Bengaluru–Mysuru trip returned both legs, a hotel and an
+  itinerary after a redundant CC question. A hotel cap change then kept both
+  trains visible and returned a quote below INR 2,000 per night.
+- Reproduced the missing class update with intercepted model output and fixed
+  explicit class handling in chat. Ran `python -m pytest -q --tb=short` on Linux
+  Python 3.12: 267 tests passed, including omission, redundant and unrelated
+  questions, alternatives, negatives and no class. No live calls were made.
+- Install the small overlay on Checkpoint 14 and restart FastAPI. A fresh chat
+  can verify that “by CC train” no longer prompts for the class when all other
+  required details are present. No new dependencies, API keys or route changes.
+
 ## Still pending in agreed scope
 
 Weather, open-ended location discovery,

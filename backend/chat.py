@@ -1,6 +1,7 @@
 """Single-process conversation state for the local portfolio demo."""
 from dataclasses import dataclass, field
 from datetime import datetime
+import re
 from zoneinfo import ZoneInfo
 
 from backend.llm import ModelCallError
@@ -9,6 +10,12 @@ from backend.plan_view import plan_view
 from backend.schemas import TripPreferences
 
 TRAIN_CLASSES = {"CC", "EC", "3A", "2A", "1A", "SL"}
+_CLASS_CODE = "(?:" + "|".join(sorted(TRAIN_CLASSES)) + ")"
+_CLASS_ONLY_QUESTIONS = {
+    "which train class would you prefer?",
+    "what train class would you prefer?",
+    "please provide: train class (e.g. cc).",
+}
 FLIGHT_CLASSES = {"economy", "premium economy", "business", "first"}
 RETAINED = ("preferences", "transport", "hotels", "places", "itinerary", "costs")
 REQUIRED_LABELS = {
@@ -17,6 +24,20 @@ REQUIRED_LABELS = {
     "transport_mode": "train, flight, or comparison", "train_class": "train class (e.g. CC)",
     "flight_class": "flight cabin (e.g. Economy)",
 }
+
+
+def _explicit_train_class(message: str) -> str | None:
+    """Recognize a single positive literal, leaving other choices to the Supervisor."""
+    if re.search(r"\b(?:no|not|cannot|without|avoid|except|never|unless|whether|if|either|or|instead of|\w+n['’]t)\b",
+                 message, re.IGNORECASE):
+        return None
+    codes = set(re.findall(rf"\b{_CLASS_CODE}\b", message.upper()))
+    if len(codes) != 1:
+        return None
+    code = codes.pop()
+    if re.search(rf"\b(?:by\s+{code}\s+train\b|train\s+class\s*[:=]\s*{code}\b)", message, re.IGNORECASE):
+        return code
+    return None
 
 
 def chat_constraints(p: TripPreferences) -> tuple[list[str], str | None]:
@@ -67,6 +88,16 @@ class TripChat:
         if turn.decision.intent in ("question", "unsupported"):
             return self.reply(turn.decision.answer or "Please tell me what you'd like to plan or change.")
 
+        question = turn.decision.clarification_question
+        if candidate.transport_mode in ("train", "compare"):
+            explicit_class = _explicit_train_class(message)
+            if explicit_class and candidate.train_class is None and "train_class" not in turn.patch:
+                candidate.train_class = explicit_class
+            if (explicit_class and candidate.train_class
+                    and candidate.train_class.upper() == explicit_class
+                    and (question or "").strip().casefold() in _CLASS_ONLY_QUESTIONS):
+                question = None
+
         missing, error = chat_constraints(candidate)
         if error:
             return self.reply(error)
@@ -75,9 +106,9 @@ class TripChat:
         candidate = candidate.model_copy(update=cities | {
             "train_class": candidate.train_class.upper() if candidate.train_class else None,
         })
-        if missing or turn.decision.clarification_question:
+        if missing or question:
             self.pending = candidate
-            self.question = turn.decision.clarification_question or (
+            self.question = question or (
                 "Please provide: " + ", ".join(REQUIRED_LABELS[name] for name in missing) + "."
             )
             return self.reply(self.question)
