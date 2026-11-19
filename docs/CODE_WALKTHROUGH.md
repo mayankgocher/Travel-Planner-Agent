@@ -569,3 +569,12 @@ services first using the returned train type, then by duration and departure.
 It checks the timetable before attaching class or demo fare. If the first two
 do not produce a usable option, it can check one more without repeating the
 route search. A warning names the affected leg and class when none qualifies.
+
+## Checkpoint 16: resolve flight endpoints
+
+`backend/providers/airport_lookup.py` turns provider city suggestions into
+airport candidates. `backend/chat.py` attaches a code on an exact match, or
+waits for the user to choose one. The explicit flight template skips the
+Supervisor for initial intake just like the train template. In comparisons,
+chat also resolves the railway stations for those cities. Then
+`trip_bindings()` hands the selected codes to the same transport workflow.

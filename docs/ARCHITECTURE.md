@@ -7,10 +7,10 @@ and price provenance are separate. Checkpoint 11 adds the saved-trip Streamlit
 screen; Checkpoint 12 connects it to FastAPI for the fixed Delhi/Jaipur route.
 Checkpoint 14 adds browser route selection from an explicit four-city catalog.
 Checkpoint 15 adds provider-backed station discovery for train chat.
-Open-ended airport selection remains pending.
+Checkpoint 16 adds Indian airport selection in Trip chat.
 The recovery revision adds failed-Itinerary resumption without new agents,
 database layers, retry loops or changes to the product scope.
-The diagram remains the product blueprint: open-ended airport discovery, weather,
+The diagram remains the product blueprint: weather,
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
 
@@ -450,3 +450,17 @@ The timetable still checks class and ordered stops. If the first two
 candidates yield no usable fare, a third can be checked. This gives at most
 eight schedule/timetable calls, separate from up to two station lookups.
 CLI probe caps and the live fare endpoint behavior are unchanged.
+
+## Checkpoint 16: airports before flight search
+
+Trip chat uses the preset airport bindings for Delhi, Jaipur and Bengaluru,
+and SerpApi's flight autocomplete for other city names, airport names and
+IATA codes. An exact code or unambiguous exact location can proceed; partial
+or multiple matches prompt for a displayed code. Airport results must come
+from Indian city suggestions. Flights alone don't need railway bindings;
+a comparison resolves a station for each of the same cities before retrieval.
+
+Python stores the IATA codes alongside any rail codes in trip preferences.
+Changing an airport invalidates transport, itinerary and costs; a change to
+the destination city also invalidates hotels and places. Existing timezone
+checks still reject flight segments whose airport timezone is unknown.

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from langchain_core.tools import StructuredTool
 
-from backend.locations import find_city, route_error
+from backend.locations import find_city
 from backend.providers.flights import AirportLocation, FlightAdapter
 from backend.providers.http import ProviderError, SerpApiHttp
 from backend.providers.rail_http import RailRadarHttp
@@ -21,38 +21,40 @@ class JourneyBindings:
     # Explicit selections, not a silent first autocomplete match.
     origin_airport: AirportLocation | None
     destination_airport: AirportLocation | None
-    origin_station: StationBinding
-    destination_station: StationBinding
+    origin_station: StationBinding | None
+    destination_station: StationBinding | None
     destination_timezone: str
 
     def __post_init__(self):
         ZoneInfo(self.destination_timezone)
         for airport, station in ((self.origin_airport, self.origin_station),
                                  (self.destination_airport, self.destination_station)):
-            if airport and airport.city.casefold() != station.city.casefold():
+            if airport and station and airport.city.casefold() != station.city.casefold():
                 raise ValueError("Airport and station bindings must describe the same selected city")
 
 
 def trip_bindings(preferences: TripPreferences) -> JourneyBindings:
-    if (preferences.transport_mode == "train" and preferences.origin and preferences.destination
-            and preferences.origin_station and preferences.destination_station):
-        if preferences.origin_station == preferences.destination_station:
-            raise ValueError("The departure and destination stations must differ.")
-        return JourneyBindings(
-            None, None, StationBinding(preferences.origin_station, preferences.origin),
-            StationBinding(preferences.destination_station, preferences.destination), "Asia/Kolkata",
-        )
-    error = route_error(preferences.origin, preferences.destination, preferences.transport_mode)
-    origin, destination = find_city(preferences.origin), find_city(preferences.destination)
-    if error or not origin or not destination:
-        raise ValueError(error or "Both departure and destination cities are required.")
+    p = preferences
+    if not p.origin or not p.destination:
+        raise ValueError("Both departure and destination cities are required.")
     zone = "Asia/Kolkata"
-    return JourneyBindings(
-        AirportLocation(origin.airport, origin.name, zone) if origin.airport else None,
-        AirportLocation(destination.airport, destination.name, zone) if destination.airport else None,
-        StationBinding(origin.station, origin.name), StationBinding(destination.station, destination.name),
-        zone,
-    )
+    origin = find_city(p.origin)
+    destination = find_city(p.destination)
+    airports = (None, None)
+    stations = (None, None)
+    if p.transport_mode in ("flight", "compare"):
+        a = p.origin_airport or (origin.airport if origin else None)
+        b = p.destination_airport or (destination.airport if destination else None)
+        if not a or not b or a == b:
+            raise ValueError("Two distinct airport bindings are required.")
+        airports = AirportLocation(a, p.origin, zone), AirportLocation(b, p.destination, zone)
+    if p.transport_mode in ("train", "compare"):
+        a = p.origin_station or (origin.station if origin else None)
+        b = p.destination_station or (destination.station if destination else None)
+        if not a or not b or a == b:
+            raise ValueError("Two distinct station bindings are required.")
+        stations = StationBinding(a, p.origin), StationBinding(b, p.destination)
+    return JourneyBindings(*airports, *stations, zone)
 
 
 def jaipur_probe_bindings():
@@ -113,6 +115,9 @@ class TravelProviderSession:
             for leg in ("outbound", "return"):
                 if mode == "train":
                     a, b = self.bindings.origin_station, self.bindings.destination_station
+                    if a is None or b is None:
+                        warnings.append("Train search requires a station binding for both cities.")
+                        break
                     if leg == "return": a, b = b, a
                     def search(a=a, b=b, leg=leg):
                         adapter = RailRadarAdapter(self._rail(), fare_mode=self.settings.train_fare_mode)
@@ -158,7 +163,8 @@ class TravelProviderSession:
         return self._search("serpapi", "places", search)
 
     def _check_destination(self, p):
-        if not p.destination or p.destination.casefold() != self.bindings.destination_station.city.casefold():
+        destination = self.bindings.destination_airport or self.bindings.destination_station
+        if not p.destination or not destination or p.destination.casefold() != destination.city.casefold():
             raise ValueError("Destination selection must be resolved before retrieval")
 
     def tools(self):

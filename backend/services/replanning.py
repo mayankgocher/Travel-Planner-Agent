@@ -6,6 +6,8 @@ DEPENDENCIES = {
     "destination": {"transport", "hotels", "places", "weather", "itinerary", "costs"},
     "origin_station": {"transport", "itinerary", "costs"},
     "destination_station": {"transport", "itinerary", "costs"},
+    "origin_airport": {"transport", "itinerary", "costs"},
+    "destination_airport": {"transport", "itinerary", "costs"},
     "departure_date": {"transport", "hotels", "weather", "itinerary", "costs"},
     "return_date": {"transport", "hotels", "weather", "itinerary", "costs"},
     "adults": {"transport", "hotels", "itinerary", "costs"},

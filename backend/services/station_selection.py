@@ -37,6 +37,9 @@ class StationChoice:
                 f"{options}\nTo change your request, say 'cancel station selection'.")
 
     def apply(self, preferences: TripPreferences, station: StationCandidate) -> TripPreferences:
+        if preferences.transport_mode == "compare":
+            # The airport resolution selected the shared city; don't relabel it.
+            return preferences.model_copy(update={f"{self.field}_station": station.code})
         station_name = label(station.name)
         # Avoid using an opaque station code as the destination for hotels/places.
         # When the station has no city, retain a matching city query or its station name.
@@ -49,3 +52,13 @@ class StationChoice:
             self.field: city.name if city else location,
             f"{self.field}_station": station.code,
         })
+
+
+def station_matches_city(station: StationCandidate, city: str) -> bool:
+    """For comparisons, don't pair an airport with an unrelated station."""
+    target = label(city).casefold()
+    if station.city:
+        known = find_city(station.city)
+        return label(known.name if known else station.city).casefold() == target
+    name = label(station.name).casefold()
+    return name == target or name.startswith(target + " ")

@@ -23,6 +23,8 @@ class TripPreferences(DomainModel):
     # Resolved by Python from the catalog or from a confirmed station lookup.
     origin_station: Annotated[str, Field(pattern=r"^[A-Z0-9]{1,10}$")] | None = None
     destination_station: Annotated[str, Field(pattern=r"^[A-Z0-9]{1,10}$")] | None = None
+    origin_airport: Annotated[str, Field(pattern=r"^[A-Z]{3}$")] | None = None
+    destination_airport: Annotated[str, Field(pattern=r"^[A-Z]{3}$")] | None = None
     departure_date: date | None = None
     return_date: date | None = None
     adults: Annotated[int, Field(strict=True, ge=1)] | None = None

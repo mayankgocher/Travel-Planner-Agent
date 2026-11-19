@@ -340,3 +340,13 @@ The user confirmed both stations live and obtained a return leg, but
 neither of the two outbound trains checked confirmed CC. The improved
 shortlist was verified against offline fixtures. That live result does not
 establish whether another CC service was returned or operated on the date.
+
+## Checkpoint 16: airport autocomplete
+
+[SerpApi Google Flights Autocomplete](https://serpapi.com/google-flights-autocomplete-api)
+returns city suggestions with airport names and IATA codes. `gl=in` localizes
+search; it is not a country filter. The app checks each suggestion's Indian
+country/state label, rejects unrelated country labels, and asks the user on
+multiple or partial matches. This check uses the provider's returned labels.
+Airport options are not evidence of flight schedules or seats. Offline tests
+used simulated provider results; live autocomplete still needs verification.

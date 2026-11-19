@@ -1,6 +1,6 @@
 # Multi-agent travel planner
 
-Checkpoint 15.2 — improve the browser's train shortlist for the requested class.
+Checkpoint 16 — airport discovery for domestic flights and comparisons in Trip chat.
 
 Itinerary patch: after the existing one correction, a draft with unknown or
 repeated place IDs can be shortened if at least one visit survives and the
@@ -10,7 +10,7 @@ shortened schedule passes every check. The app discloses what it omitted.
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. The local
 Streamlit demo has a trip chat, a saved result, and a secondary planning form.
-Open-ended airport discovery, weather, locks and product versions remain pending. Train prices
+Weather, locks and product versions remain pending. Train prices
 default to labelled deterministic assumptions; real rail fare access is still restricted. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
@@ -50,8 +50,9 @@ Install `Travel_Project_Checkpoint_15_Station_Lookup.zip` on top of Checkpoint
 14 with the chat and transfer buffer patches. Run `INSTALL_CHECKPOINT_15.ps1`
 from an extracted staging folder with `-Project` pointing to your project. The
 installer backs up replaced files and preserves `.env`, the venv, and reports.
-For an existing Checkpoint 15.1 install, apply the Checkpoint 15.2 rail
-shortlist overlay and restart FastAPI. The installer is in the overlay ZIP.
+For an existing Checkpoint 15.2 install, apply
+`Travel_Checkpoint_16_Airport_Lookup.zip` with `INSTALL_AIRPORT_LOOKUP.ps1`
+and restart FastAPI and Streamlit. The installer is in the overlay ZIP.
 Open two PowerShell terminals in the project root. Start FastAPI in the first:
 
 ```powershell
@@ -74,14 +75,22 @@ code or a single exact name match is accepted; otherwise reply with one of
 the displayed codes. If the lookup cannot resolve the city, try a station
 name or code. Type `cancel station selection` to change your pending request.
 Station selection does not prove a service exists on the requested dates.
-Flights and flight/train comparisons still use catalog cities with airports.
-The **Live planning form** still has the four city dropdowns. The saved sample
+In **Trip chat**, domestic flights accept Indian city names, airport names or
+three-letter IATA codes. New locations use SerpApi's airport suggestions.
+If there are multiple or partial matches, reply with one of the offered codes;
+say `cancel airport selection` to change the request. Airport lookup does not
+guarantee a flight operates on the requested dates. Comparison requests also
+need a railway station for each of the same cities. The **Live planning form**
+still has the four city dropdowns; use Trip chat for broader airport lookup.
+The saved sample
 and fixed-route CLI provider checks still use Delhi → Jaipur.
 Chat uses Groq to interpret each message; clarification and preference questions
 don't normally make travel-provider requests. Station clarification can make
 up to two station lookup calls on a turn with complete trip preferences, but
 doesn't search schedules or hotels until stations are confirmed. A ready trip
-needs SerpApi, and rail needs RailRadar. The browser checks two timetables per
+needs SerpApi, and rail needs RailRadar. At most two airport lookup requests
+per chat turn are allowed, separate from flight and hotel searches.
+The browser checks two timetables per
 direction and checks a third only if no usable option was found. For CC or EC,
 provider train type helps decide what to check first; only the timetable
 confirms the operated class. The browser makes at most eight rail schedule and

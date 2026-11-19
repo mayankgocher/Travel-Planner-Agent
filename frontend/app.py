@@ -234,7 +234,8 @@ def live_tab() -> None:
 def chat_tab() -> None:
     st.caption("Round trips in INR. Tell me your cities, dates, group size, and transport preference.")
     st.caption("For trains, enter an Indian city, station name, or station code. "
-               "For flights or train/flight comparisons, choose Delhi, Jaipur, or Bengaluru.")
+               "For flights, enter an Indian city, airport name, or airport code. "
+               "For train/flight comparisons, enter two Indian cities.")
     if st.button("New chat"):
         for field in ("chat_id", "chat_messages", "chat_plan", "turn_warnings"):
             st.session_state.pop(field, None)

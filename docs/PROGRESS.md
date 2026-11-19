@@ -425,9 +425,22 @@ regression cases. The patch has not been tested against live providers.
 - Install over Checkpoint 15.1 and restart FastAPI. The original request in a
   new chat can recheck the route once; live dates and availability may differ.
 
+### Checkpoint 16: airport lookup in Trip chat
+
+- Added airport lookup by Indian city, airport name or IATA code for flights
+  and flight/train comparisons. Ambiguous results wait for a code reply.
+  Flight-only requests do not use RailRadar. Comparison station resolution
+  stays tied to the airport's resolved city. The form still uses the catalog.
+- Ran `python -m pytest -q --tb=short` on Linux Python 3.12: 288 tests passed.
+  Offline cases cover airport choice, changing a same-city airport, the
+  comparison flow, non-Indian matches, an empty result and a quota error.
+  No live calls were made.
+- Install over 15.2 and restart both servers. Try a domestic economy round
+  trip in Trip chat between cities outside the original flight catalog.
+
 ## Still pending in agreed scope
 
-Weather, open-ended airport discovery,
+Weather,
 user selection controls/locks, durable application lifecycle, plan snapshots,
 systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.

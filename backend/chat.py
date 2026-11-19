@@ -7,11 +7,12 @@ from zoneinfo import ZoneInfo
 from pydantic import ValidationError
 
 from backend.llm import ModelCallError
-from backend.locations import find_city, route_error
+from backend.locations import find_city
 from backend.plan_view import plan_view
+from backend.providers.airport_lookup import AirportChoice, catalog_airport, pick_airports
 from backend.providers.http import ProviderError
 from backend.schemas import TripPreferences
-from backend.services.station_selection import StationChoice, exact_station, label
+from backend.services.station_selection import StationChoice, exact_station, label, station_matches_city
 
 TRAIN_CLASSES = {"CC", "EC", "3A", "2A", "1A", "SL"}
 _CLASS_CODE = "(?:" + "|".join(sorted(TRAIN_CLASSES)) + ")"
@@ -22,7 +23,7 @@ _CLASS_ONLY_QUESTIONS = {
 }
 _GENERIC_INTAKE_REPLY = "Please tell me what you'd like to plan or change."
 _ROUND_TRIP_EXAMPLE = (
-    "I couldn't read the trip details. For a train round trip with one destination, try: "
+    "I couldn't read the trip details. For a round trip with one destination, try: "
     "Plan a round trip from [station] to [station] by CC train for 2 adults. "
     "Depart on [day month year] and return on [day month year]."
 )
@@ -51,12 +52,14 @@ def _explicit_train_class(message: str) -> str | None:
 
 
 def _explicit_round_trip(message: str) -> dict:
-    """Read only the complete train template; never guess a missing field."""
+    """Read only the complete train or flight template; never guess a missing field."""
     place = r"[\w .’'-]{1,100}"
     date_text = r"\d{1,2} [A-Za-z]+ \d{4}"
+    cabin = r"economy|premium economy|business|first"
     match = re.fullmatch(
         rf"Plan a round trip from (?P<origin>{place}?) to (?P<destination>{place}?) "
-        rf"by (?P<train_class>{_CLASS_CODE}) train for (?P<adults>[1-6]) adults?\. "
+        rf"by (?:(?P<train_class>{_CLASS_CODE}) train|(?P<flight_class>{cabin}) flight) "
+        rf"for (?P<adults>[1-6]) adults?\. "
         rf"Depart on (?P<departure_date>{date_text}) and return on (?P<return_date>{date_text})\.?",
         " ".join(message.split()), re.IGNORECASE,
     )
@@ -71,13 +74,13 @@ def _explicit_round_trip(message: str) -> dict:
                  for name in ("departure_date", "return_date")}
     except ValueError:
         return {}
-    return fields | dates | {"transport_mode": "train", "adults": int(fields["adults"])}
+    mode = "train" if fields["train_class"] else "flight"
+    return {k: v for k, v in fields.items() if v is not None} | dates | {
+        "transport_mode": mode, "adults": int(fields["adults"]),
+    }
 
 
 def chat_constraints(p: TripPreferences) -> tuple[list[str], str | None]:
-    if p.transport_mode in ("flight", "compare"):
-        if error := route_error(p.origin, p.destination, p.transport_mode):
-            return [], error
     if p.currency != "INR":
         return [], "Please use INR for this demo."
     if p.adults is not None and p.adults > 6:
@@ -111,19 +114,20 @@ class TripChat:
     state: dict = field(default_factory=dict)
     view: dict | None = None
     station_choice: StationChoice | None = None
+    airport_choice: AirportChoice | None = None
 
-    def respond(self, message, supervisor, run, lookup_stations):
-        if self.station_choice:
-            if message.strip().casefold().rstrip(".") == "cancel station selection":
-                self.station_choice = self.pending = self.question = None
-                return self.reply("Station selection cancelled. Tell me where you'd like to travel.")
-            choice = self.station_choice
+    def respond(self, message, supervisor, run, lookup_stations, lookup_airports):
+        if choice := self.airport_choice or self.station_choice:
+            kind = "airport" if self.airport_choice else "station"
+            if message.strip().casefold().rstrip(".") == f"cancel {kind} selection":
+                self.airport_choice = self.station_choice = self.pending = self.question = None
+                return self.reply(f"{kind.title()} selection cancelled. Tell me where you'd like to travel.")
             code = re.sub(r"^use\s+", "", message.strip(), flags=re.IGNORECASE).rstrip(".").upper()
             selected = next((s for s in choice.matches if code == s.code), None)
             if selected is None:
                 return self.reply(choice.question())
-            self.station_choice = None
-            return self._resolve_and_plan(choice.apply(self.pending, selected), run, lookup_stations)
+            self.airport_choice = self.station_choice = None
+            return self._resolve_and_plan(choice.apply(self.pending, selected), run, lookup_stations, lookup_airports)
 
         before = self.pending or self.current
         patch, question = _explicit_round_trip(message), None
@@ -163,9 +167,11 @@ class TripChat:
             value = getattr(candidate, field_name)
             city = find_city(value)
             normalized[field_name] = city.name if city else value
-            if (candidate.transport_mode != "train"
-                    or label(normalized[field_name]).casefold() != label(getattr(before, field_name)).casefold()):
+            changed = label(normalized[field_name]).casefold() != label(getattr(before, field_name)).casefold()
+            if changed or candidate.transport_mode not in ("train", "compare"):
                 normalized[f"{field_name}_station"] = None
+            if changed or candidate.transport_mode not in ("flight", "compare"):
+                normalized[f"{field_name}_airport"] = None
         if candidate.origin and candidate.destination and (
                 normalized["origin"].casefold() == normalized["destination"].casefold()):
             return self.reply("Choose different cities and stations for departure and destination.")
@@ -178,10 +184,36 @@ class TripChat:
                 "Please provide: " + ", ".join(REQUIRED_LABELS[name] for name in missing) + "."
             )
             return self.reply(self.question)
-        return self._resolve_and_plan(candidate, run, lookup_stations)
+        return self._resolve_and_plan(candidate, run, lookup_stations, lookup_airports)
 
-    def _resolve_and_plan(self, candidate, run, lookup_stations):
-        if candidate.transport_mode == "train":
+    def _resolve_and_plan(self, candidate, run, lookup_stations, lookup_airports):
+        if candidate.transport_mode in ("flight", "compare"):
+            for field_name in ("origin", "destination"):
+                if getattr(candidate, f"{field_name}_airport"):
+                    continue
+                query = " ".join(getattr(candidate, field_name).split())
+                if len(query) > 100:
+                    return self._pause(candidate, "Please give a shorter city or airport name, or an IATA code.")
+                selected = catalog_airport(query)
+                options = ()
+                if not selected:
+                    try:
+                        selected, options = pick_airports(query, lookup_airports(query))
+                    except ProviderError:
+                        return self._pause(candidate, "Airport lookup is unavailable right now. No flight search was started.")
+                choice = AirportChoice(field_name, query, options)
+                if selected:
+                    candidate = choice.apply(candidate, selected)
+                    continue
+                if not options:
+                    return self._pause(candidate, f"No Indian airport match verified for {query}. Try a city and state or an IATA code.")
+                self.airport_choice = choice
+                return self._pause(candidate, choice.question())
+            if (candidate.origin_airport == candidate.destination_airport
+                    or candidate.origin.casefold() == candidate.destination.casefold()):
+                return self._pause(candidate, "Choose different cities and airports for departure and destination.")
+
+        if candidate.transport_mode in ("train", "compare"):
             for field_name in ("origin", "destination"):
                 if getattr(candidate, f"{field_name}_station"):
                     continue
@@ -195,6 +227,11 @@ class TripChat:
                     matches = lookup_stations(query)
                 except ProviderError:
                     return self._pause(candidate, "Station lookup is unavailable right now. No train search was started.")
+                if candidate.transport_mode == "compare":
+                    matches = [station for station in matches if station_matches_city(station, query)]
+                    if not matches:
+                        return self._pause(candidate, f"No railway station verified for {query} in this comparison. "
+                                           "Try flights only, or choose a different city.")
                 if not matches:
                     return self._pause(candidate, f"No railway station matched {query}. Please try a station name or code.")
                 choice = StationChoice(field_name, query, tuple(matches))

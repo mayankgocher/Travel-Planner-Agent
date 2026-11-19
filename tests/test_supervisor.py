@@ -87,8 +87,9 @@ def test_update_preserves_omitted_preferences_and_field_enum_is_complete():
     patch = validated_patch(d, current)
     merged = TripPreferences.model_validate(current.model_dump() | patch)
     assert merged.nightly_max == 4000 and merged.origin == "Delhi" and merged.interests == ["history"]
-    # These two routing fields are set by Python, never by the model.
-    assert set(get_args(PreferenceField)) == set(TripPreferences.model_fields) - {"origin_station", "destination_station"}
+    # Confirmed transport codes are set by Python, never by the model.
+    assert set(get_args(PreferenceField)) == set(TripPreferences.model_fields) - {
+        "origin_station", "destination_station", "origin_airport", "destination_airport"}
 
 
 @pytest.mark.parametrize("field,value,expected", [

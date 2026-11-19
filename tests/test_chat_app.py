@@ -27,7 +27,7 @@ def test_browser_chat_clarifies_and_reuses_trains_on_hotel_change(monkeypatch):
         ("update", {}, "What is your new nightly cap?", None),
         ("update", {"nightly_max": "3200"}, None, None),
         ("question", {}, None, "Your current nightly cap is ₹3,200."),
-        ("update", {"destination": "Mumbai", "transport_mode": "flight"}, None, None),
+        ("update", {"destination": "New Delhi", "transport_mode": "flight"}, None, None),
         ("update", {"nightly_max": "2400"}, None, None),  # No eligible hotel.
     ])
     contexts = []
@@ -89,7 +89,7 @@ def test_browser_chat_clarifies_and_reuses_trains_on_hotel_change(monkeypatch):
         assert screen.get("download_button")
         before = len(travel_hosts())
         assert send("What is my nightly cap?")["reply"] == "Your current nightly cap is ₹3,200."
-        assert "Choose a supported city" in send("Fly to Mumbai instead.")["reply"]
+        assert "Choose different cities" in send("Fly to New Delhi instead.")["reply"]
         assert len(travel_hosts()) == before
         rejected = send("Under ₹2,400.")
         assert rejected["plan"] == revised["plan"]

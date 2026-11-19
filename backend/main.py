@@ -19,6 +19,8 @@ from backend.config import Settings
 from backend.llm import create_model
 from backend.locations import find_city, route_error
 from backend.plan_view import plan_view
+from backend.providers.airport_lookup import search_airports
+from backend.providers.http import SerpApiHttp
 from backend.providers.rail_http import RailRadarHttp
 from backend.providers.railradar import RailRadarAdapter
 from backend.providers.session import TravelProviderSession, trip_bindings
@@ -60,7 +62,7 @@ class PlanRequest(DomainModel):
         return TripPreferences(currency="INR", interests=["history"], pace="relaxed", **fields)
 
 
-app = FastAPI(title="Travel Planning Agent", version="0.15.2")
+app = FastAPI(title="Travel Planning Agent", version="0.16.0")
 logger = logging.getLogger(__name__)
 
 
@@ -174,7 +176,7 @@ def chat(request: ChatRequest):
                 def run(preferences, seed):
                     return run_workflow(settings, get_model(), preferences, seed)
 
-                station_lookup = None
+                station_lookup = airport_http = None
 
                 def find_stations(query):
                     nonlocal station_lookup
@@ -184,7 +186,14 @@ def chat(request: ChatRequest):
                         station_lookup = RailRadarAdapter(rail)
                     return station_lookup.stations(query).items
 
-                result = session.respond(request.message, supervisor, run, find_stations)
+                def find_airports(query):
+                    nonlocal airport_http
+                    if airport_http is None:
+                        require_keys(settings, "serpapi")
+                        airport_http = SerpApiHttp(settings.require_provider_key("serpapi"), max_requests=2, http_client=http)
+                    return search_airports(airport_http, query)
+
+                result = session.respond(request.message, supervisor, run, find_stations, find_airports)
         except HTTPException:
             raise
         except Exception as error:
