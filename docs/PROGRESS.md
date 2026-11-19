@@ -372,9 +372,48 @@ regression cases. The patch has not been tested against live providers.
   and restart FastAPI. A live rerun is optional; no existing trip data or
   provider settings require changes.
 
+### Checkpoint 15 station discovery in train chat
+
+- Added exact and ambiguous station resolution outside the four-city catalog.
+  Confirmed codes survive later chat turns and cannot be set by the Supervisor.
+- Ran `python -m pytest -q --tb=short` on Linux Python 3.12: 276 tests passed.
+  New tests cover exact code/name, choice and invalid confirmation, same-city
+  station revision, hotel-only reuse, no match and lookup quota failure. No
+  live calls were made.
+- On Windows, install the overlay, run pytest and restart both servers. Use
+  a fresh chat with a train route outside the catalog; for an ambiguous city,
+  reply with an offered station code. Live provider coverage remains unverified.
+
+### Checkpoint 15 chat intake recovery
+
+- The Windows Kanpur Central–Lucknow prompt returned the chat intake's generic
+  reply before station lookup. The exact live model decision is unavailable.
+- Reproduced that reply with both empty question and empty unsupported
+  decisions. A narrow, explicit round-trip template can now recover the input
+  without another model call. No station or service is guessed.
+- Ran `python -m pytest -q --tb=short` on Linux Python 3.12: 280 tests passed.
+  The tests confirmed station choice, completion, and no provider search for
+  multi-city or booking requests in this fallback. No live calls were made.
+- Install over Checkpoint 15, restart FastAPI, then test the original wording
+  in a new chat. The station options still depend on live provider data.
+
+### Checkpoint 15.1: direct train intake
+
+- A Windows retry with the same complete request showed the intake's
+  model-error reply, which bypassed the earlier recovery for empty decisions.
+- The documented complete template now goes straight to Python validation
+  and station lookup. Groq is initialized only for free-form intake or
+  subsequent trip planning. The intent rules for other messages are unchanged.
+- Offline tests replayed the exact screenshot prompt with the clock fixed at
+  19 November 2026 and Groq unavailable, and ran a separate complete
+  station-choice workflow with fake provider responses. No live calls made.
+  All 280 tests passed via `python -m pytest -q --tb=short` on Linux Python 3.12.
+- Install the cumulative Checkpoint 15.1 intake overlay on Checkpoint 15.
+  Restart FastAPI, click New chat, and test the input once.
+
 ## Still pending in agreed scope
 
-Weather, open-ended location discovery,
+Weather, open-ended airport discovery,
 user selection controls/locks, durable application lifecycle, plan snapshots,
 systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.

@@ -6,10 +6,11 @@ Train pricing now has an explicitly approved deterministic mock mode. Schedule
 and price provenance are separate. Checkpoint 11 adds the saved-trip Streamlit
 screen; Checkpoint 12 connects it to FastAPI for the fixed Delhi/Jaipur route.
 Checkpoint 14 adds browser route selection from an explicit four-city catalog.
-Open-ended city/station discovery remains pending.
+Checkpoint 15 adds provider-backed station discovery for train chat.
+Open-ended airport selection remains pending.
 The recovery revision adds failed-Itinerary resumption without new agents,
 database layers, retry loops or changes to the product scope.
-The diagram remains the product blueprint: open-ended city discovery, weather,
+The diagram remains the product blueprint: open-ended airport discovery, weather,
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
 
@@ -425,3 +426,18 @@ existing providers use those codes in both directions, and SerpApi searches for
 hotels and activities in the selected destination. A destination change
 invalidates those results through the existing dependency table. No new agent,
 provider endpoint or lookup request is needed to resolve a supported city.
+
+## Checkpoint 15: resolve train stations before running the graph
+
+`TripChat` checks the trip preferences first. For train-only requests, each
+endpoint is resolved using the catalog fast path or one RailRadar station
+lookup. Exact codes and single exact matches can proceed; for other results
+chat stores the offered options and waits for an exact code reply. That reply
+needs no interpretation by Groq. Confirmed codes are Python-owned fields on
+`TripPreferences`; the Supervisor's update schema cannot write them.
+
+The outward and return searches use the confirmed codes in opposite directions.
+Hotel and place search use the available destination name, never a bare code.
+Station changes invalidate transport/itinerary and costs; a city change also
+invalidates hotels and places. The planning form and flight routes still use
+catalog bindings. The provider lookup is not an exhaustive city directory.

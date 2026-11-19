@@ -4,6 +4,8 @@ from backend.schemas import Component, Selection, TripPreferences
 DEPENDENCIES = {
     "origin": {"transport", "itinerary", "costs"},
     "destination": {"transport", "hotels", "places", "weather", "itinerary", "costs"},
+    "origin_station": {"transport", "itinerary", "costs"},
+    "destination_station": {"transport", "itinerary", "costs"},
     "departure_date": {"transport", "hotels", "weather", "itinerary", "costs"},
     "return_date": {"transport", "hotels", "weather", "itinerary", "costs"},
     "adults": {"transport", "hotels", "itinerary", "costs"},

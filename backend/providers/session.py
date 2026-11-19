@@ -34,6 +34,14 @@ class JourneyBindings:
 
 
 def trip_bindings(preferences: TripPreferences) -> JourneyBindings:
+    if (preferences.transport_mode == "train" and preferences.origin and preferences.destination
+            and preferences.origin_station and preferences.destination_station):
+        if preferences.origin_station == preferences.destination_station:
+            raise ValueError("The departure and destination stations must differ.")
+        return JourneyBindings(
+            None, None, StationBinding(preferences.origin_station, preferences.origin),
+            StationBinding(preferences.destination_station, preferences.destination), "Asia/Kolkata",
+        )
     error = route_error(preferences.origin, preferences.destination, preferences.transport_mode)
     origin, destination = find_city(preferences.origin), find_city(preferences.destination)
     if error or not origin or not destination:

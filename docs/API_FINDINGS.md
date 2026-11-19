@@ -319,3 +319,13 @@ The Bengaluru airport code (BLR) is listed by [Air India](https://www.airindia.c
 This demo binds no airport for Mysuru; it does not claim Mysuru lacks an airport.
 The SBC/MYS and MYS/SBC requests and destination text were verified with
 intercepted HTTP. Live timetable, class and quote coverage remain unverified.
+
+## Checkpoint 15: station resolution in chat
+
+[RailRadar's station search](https://railradar.in/docs/search-stations) matches
+code or station name by prefix or substring, and its response example has a
+nullable `city`. The app asks for confirmation on partial/multiple matches,
+uses the station name as a location fallback when needed, and stops if no
+station is confirmed. Each chat turn makes at most two lookup requests with
+five candidates per lookup. Coverage outside the curated list depends on
+provider results. No new live provider request was made for this checkpoint.

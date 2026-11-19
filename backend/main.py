@@ -19,6 +19,8 @@ from backend.config import Settings
 from backend.llm import create_model
 from backend.locations import find_city, route_error
 from backend.plan_view import plan_view
+from backend.providers.rail_http import RailRadarHttp
+from backend.providers.railradar import RailRadarAdapter
 from backend.providers.session import TravelProviderSession, trip_bindings
 from backend.runtime import build_provider_workflow
 from backend.schemas import DomainModel, Money, TripPreferences
@@ -58,7 +60,7 @@ class PlanRequest(DomainModel):
         return TripPreferences(currency="INR", interests=["history"], pace="relaxed", **fields)
 
 
-app = FastAPI(title="Travel Planning Agent", version="0.14.0")
+app = FastAPI(title="Travel Planning Agent", version="0.15.1")
 logger = logging.getLogger(__name__)
 
 
@@ -155,16 +157,34 @@ def chat(request: ChatRequest):
             raise HTTPException(404, "This chat expired. Start a new chat.")
         session = session or TripChat()
         settings = planner_settings()
-        require_keys(settings, "groq")
         try:
             with httpx.Client(timeout=45) as http:
-                model = create_model(settings, http_client=http)
-                supervisor = Supervisor(model, settings.app_timezone)
+                model = None
+
+                def get_model():
+                    nonlocal model
+                    if model is None:
+                        require_keys(settings, "groq")
+                        model = create_model(settings, http_client=http)
+                    return model
+
+                def supervisor(message, before, **kwargs):
+                    return Supervisor(get_model(), settings.app_timezone)(message, before, **kwargs)
 
                 def run(preferences, seed):
-                    return run_workflow(settings, model, preferences, seed)
+                    return run_workflow(settings, get_model(), preferences, seed)
 
-                result = session.respond(request.message, supervisor, run)
+                station_lookup = None
+
+                def find_stations(query):
+                    nonlocal station_lookup
+                    if station_lookup is None:
+                        require_keys(settings, "railradar")
+                        rail = RailRadarHttp(settings.require_provider_key("railradar"), max_requests=2, http_client=http)
+                        station_lookup = RailRadarAdapter(rail)
+                    return station_lookup.stations(query).items
+
+                result = session.respond(request.message, supervisor, run, find_stations)
         except HTTPException:
             raise
         except Exception as error:

@@ -539,3 +539,25 @@ between activities, `omit_transfer_conflicts()` keeps a compatible subset.
 It considers the earliest finishing visit first to leave room for later
 ones. It never changes times or adds places. The normal validator runs again
 before the shortened schedule can be shown, and the warning counts omissions.
+
+## Checkpoint 15: add a station to a train chat
+
+1. The Supervisor extracts location text. In `backend/chat.py`, Python keeps
+   the catalog fast path and uses the existing RailRadar station lookup for
+   other names and codes once the route, dates, travelers and class are ready.
+2. `backend/services/station_selection.py` distinguishes exact from ambiguous
+   results. Chat holds the offered choices and accepts a listed code. It
+   doesn't ask the model to guess which result the user meant.
+3. Both codes become part of trip state. `trip_bindings()` uses those codes
+   for the round trip; the destination name still drives the hotel and place
+   search. A change to a station code redoes trains and their dependent
+   results. Changing only hotel filters leaves station choices intact.
+
+### Read a complete train request before calling the Supervisor
+
+In `backend/chat.py`, the documented full train round-trip sentence is parsed
+before calling the Supervisor. Python reads the two locations, class, traveler
+count and dates, validates them and starts the same station-selection flow.
+In `backend/main.py` the Groq client is created only when a step needs it. The
+rest of the planning workflow still uses its usual model steps, and other
+messages still go to the Supervisor.

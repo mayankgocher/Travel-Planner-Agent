@@ -115,9 +115,15 @@ class Supervisor:
         prompt = SYSTEM_PROMPT
         if browser_chat:
             context["pending_question"] = chat_question
-            context["supported_cities"] = CITY_NAMES
+            context["catalog_cities"] = CITY_NAMES
             prompt += ("\nBrowser chat plans one round trip in INR. Ask for missing departure and destination "
-                       "cities. Pass explicitly named cities as updates for Python to check against the catalog. "
+                       "locations. For train mode, pass cities, station names, or station codes as the origin "
+                       "and destination exactly as the user specifies. Python resolves train stations, so do "
+                       "not guess codes, reject non-catalog train locations, or ask for a station after the "
+                       "user has given a city. A round trip by train between two named stations or cities "
+                       "is a plan request even when neither is in the catalog. If the request is a question "
+                       "or unsupported, give a non-empty answer that explains the reason. "
+                       "Flights and train/flight comparisons use catalog cities only. "
                        "Do not guess or substitute a city. Use existing trip fields and "
                        "the pending question to interpret short replies. For a change like 'cheaper hotel' "
                        "without an amount, ask for a new nightly cap; do not change trip budget or other offers. "

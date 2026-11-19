@@ -4,10 +4,14 @@ from datetime import datetime
 import re
 from zoneinfo import ZoneInfo
 
+from pydantic import ValidationError
+
 from backend.llm import ModelCallError
 from backend.locations import find_city, route_error
 from backend.plan_view import plan_view
+from backend.providers.http import ProviderError
 from backend.schemas import TripPreferences
+from backend.services.station_selection import StationChoice, exact_station, label
 
 TRAIN_CLASSES = {"CC", "EC", "3A", "2A", "1A", "SL"}
 _CLASS_CODE = "(?:" + "|".join(sorted(TRAIN_CLASSES)) + ")"
@@ -16,6 +20,12 @@ _CLASS_ONLY_QUESTIONS = {
     "what train class would you prefer?",
     "please provide: train class (e.g. cc).",
 }
+_GENERIC_INTAKE_REPLY = "Please tell me what you'd like to plan or change."
+_ROUND_TRIP_EXAMPLE = (
+    "I couldn't read the trip details. For a train round trip with one destination, try: "
+    "Plan a round trip from [station] to [station] by CC train for 2 adults. "
+    "Depart on [day month year] and return on [day month year]."
+)
 FLIGHT_CLASSES = {"economy", "premium economy", "business", "first"}
 RETAINED = ("preferences", "transport", "hotels", "places", "itinerary", "costs")
 REQUIRED_LABELS = {
@@ -40,9 +50,34 @@ def _explicit_train_class(message: str) -> str | None:
     return None
 
 
+def _explicit_round_trip(message: str) -> dict:
+    """Read only the complete train template; never guess a missing field."""
+    place = r"[\w .’'-]{1,100}"
+    date_text = r"\d{1,2} [A-Za-z]+ \d{4}"
+    match = re.fullmatch(
+        rf"Plan a round trip from (?P<origin>{place}?) to (?P<destination>{place}?) "
+        rf"by (?P<train_class>{_CLASS_CODE}) train for (?P<adults>[1-6]) adults?\. "
+        rf"Depart on (?P<departure_date>{date_text}) and return on (?P<return_date>{date_text})\.?",
+        " ".join(message.split()), re.IGNORECASE,
+    )
+    if not match:
+        return {}
+    fields = match.groupdict()
+    if any(re.search(r"\b(?:and|or|via|to|then|through)\b", fields[name], re.IGNORECASE)
+           for name in ("origin", "destination")):
+        return {}
+    try:
+        dates = {name: datetime.strptime(fields[name], "%d %B %Y").date()
+                 for name in ("departure_date", "return_date")}
+    except ValueError:
+        return {}
+    return fields | dates | {"transport_mode": "train", "adults": int(fields["adults"])}
+
+
 def chat_constraints(p: TripPreferences) -> tuple[list[str], str | None]:
-    if error := route_error(p.origin, p.destination, p.transport_mode):
-        return [], error
+    if p.transport_mode in ("flight", "compare"):
+        if error := route_error(p.origin, p.destination, p.transport_mode):
+            return [], error
     if p.currency != "INR":
         return [], "Please use INR for this demo."
     if p.adults is not None and p.adults > 6:
@@ -75,23 +110,45 @@ class TripChat:
     question: str | None = None
     state: dict = field(default_factory=dict)
     view: dict | None = None
+    station_choice: StationChoice | None = None
 
-    def respond(self, message, supervisor, run):
+    def respond(self, message, supervisor, run, lookup_stations):
+        if self.station_choice:
+            if message.strip().casefold().rstrip(".") == "cancel station selection":
+                self.station_choice = self.pending = self.question = None
+                return self.reply("Station selection cancelled. Tell me where you'd like to travel.")
+            choice = self.station_choice
+            code = re.sub(r"^use\s+", "", message.strip(), flags=re.IGNORECASE).rstrip(".").upper()
+            selected = next((s for s in choice.matches if code == s.code), None)
+            if selected is None:
+                return self.reply(choice.question())
+            self.station_choice = None
+            return self._resolve_and_plan(choice.apply(self.pending, selected), run, lookup_stations)
+
         before = self.pending or self.current
+        patch, question = _explicit_round_trip(message), None
+        if not patch:
+            try:
+                turn = supervisor(message, before, chat_question=self.question, browser_chat=True)
+            except ModelCallError as error:
+                if error.http_status == 429:
+                    return self.reply("Groq rate-limited this message. Wait for capacity before trying again.")
+                return self.reply(_ROUND_TRIP_EXAMPLE)
+            question = turn.decision.clarification_question
+            patch = turn.patch
+            if turn.decision.intent in ("question", "unsupported"):
+                answer = (turn.decision.answer or "").strip()
+                if answer and answer != _GENERIC_INTAKE_REPLY:
+                    return self.reply(answer)
+                return self.reply(question or _ROUND_TRIP_EXAMPLE)
         try:
-            turn = supervisor(message, before, chat_question=self.question, browser_chat=True)
-            candidate = TripPreferences.model_validate(before.model_dump() | turn.patch)
-        except ModelCallError as error:
-            if error.http_status == 429:
-                return self.reply("Groq rate-limited this message. Wait for capacity before trying again.")
-            return self.reply("I couldn't apply that request. Please restate the details you want to change.")
-        if turn.decision.intent in ("question", "unsupported"):
-            return self.reply(turn.decision.answer or "Please tell me what you'd like to plan or change.")
+            candidate = TripPreferences.model_validate(before.model_dump() | patch)
+        except ValidationError:
+            return self.reply("Check that the stations are different and the return date follows departure.")
 
-        question = turn.decision.clarification_question
         if candidate.transport_mode in ("train", "compare"):
             explicit_class = _explicit_train_class(message)
-            if explicit_class and candidate.train_class is None and "train_class" not in turn.patch:
+            if explicit_class and candidate.train_class is None and "train_class" not in patch:
                 candidate.train_class = explicit_class
             if (explicit_class and candidate.train_class
                     and candidate.train_class.upper() == explicit_class
@@ -101,9 +158,18 @@ class TripChat:
         missing, error = chat_constraints(candidate)
         if error:
             return self.reply(error)
-        cities = {name: city.name for name in ("origin", "destination")
-                  if (city := find_city(getattr(candidate, name)))}
-        candidate = candidate.model_copy(update=cities | {
+        normalized = {}
+        for field_name in ("origin", "destination"):
+            value = getattr(candidate, field_name)
+            city = find_city(value)
+            normalized[field_name] = city.name if city else value
+            if (candidate.transport_mode != "train"
+                    or label(normalized[field_name]).casefold() != label(getattr(before, field_name)).casefold()):
+                normalized[f"{field_name}_station"] = None
+        if candidate.origin and candidate.destination and (
+                normalized["origin"].casefold() == normalized["destination"].casefold()):
+            return self.reply("Choose different cities and stations for departure and destination.")
+        candidate = candidate.model_copy(update=normalized | {
             "train_class": candidate.train_class.upper() if candidate.train_class else None,
         })
         if missing or question:
@@ -112,7 +178,34 @@ class TripChat:
                 "Please provide: " + ", ".join(REQUIRED_LABELS[name] for name in missing) + "."
             )
             return self.reply(self.question)
+        return self._resolve_and_plan(candidate, run, lookup_stations)
 
+    def _resolve_and_plan(self, candidate, run, lookup_stations):
+        if candidate.transport_mode == "train":
+            for field_name in ("origin", "destination"):
+                if getattr(candidate, f"{field_name}_station"):
+                    continue
+                query = " ".join(getattr(candidate, field_name).split())
+                if city := find_city(query):
+                    setattr(candidate, f"{field_name}_station", city.station)
+                    continue
+                if len(query) > 100:
+                    return self._pause(candidate, "Please give a shorter railway station name or code.")
+                try:
+                    matches = lookup_stations(query)
+                except ProviderError:
+                    return self._pause(candidate, "Station lookup is unavailable right now. No train search was started.")
+                if not matches:
+                    return self._pause(candidate, f"No railway station matched {query}. Please try a station name or code.")
+                choice = StationChoice(field_name, query, tuple(matches))
+                selected = exact_station(query, matches)
+                if selected is None:
+                    self.station_choice = choice
+                    return self._pause(candidate, choice.question())
+                candidate = choice.apply(candidate, selected)
+            if (candidate.origin_station == candidate.destination_station
+                    or candidate.origin.casefold() == candidate.destination.casefold()):
+                return self._pause(candidate, "Choose different cities and stations for departure and destination.")
         if candidate == self.current and self.view and self.view["days"]:
             self.pending = self.question = None
             return self.reply("The plan is unchanged. Tell me which dates, transport, or hotel filters to change.")
@@ -130,6 +223,10 @@ class TripChat:
         if not view["days"]:
             return self.reply("I have partial results, but no validated itinerary. See the warnings below.")
         return self.reply("I've updated your plan." if seed.get("itinerary") else "Here's your trip plan. You can ask me to change it.")
+
+    def _pause(self, candidate, question):
+        self.pending, self.question = candidate, question
+        return self.reply(question)
 
     def reply(self, message: str) -> dict:
         return {"reply": message, "plan": self.view}
