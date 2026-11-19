@@ -17,13 +17,17 @@ from backend.agents.supervisor import Supervisor
 from backend.chat import TripChat
 from backend.config import Settings
 from backend.llm import create_model
+from backend.locations import find_city, route_error
 from backend.plan_view import plan_view
-from backend.providers.session import TravelProviderSession, jaipur_probe_bindings
+from backend.providers.session import TravelProviderSession, trip_bindings
 from backend.runtime import build_provider_workflow
 from backend.schemas import DomainModel, Money, TripPreferences
 
 
 class PlanRequest(DomainModel):
+    # Defaults preserve callers of the original Delhi–Jaipur form endpoint.
+    origin: Annotated[str, Field(min_length=1, max_length=80)] = "Delhi"
+    destination: Annotated[str, Field(min_length=1, max_length=80)] = "Jaipur"
     departure_date: date
     return_date: date
     adults: Annotated[int, Field(strict=True, ge=1, le=6)] = 2
@@ -38,6 +42,8 @@ class PlanRequest(DomainModel):
 
     @model_validator(mode="after")
     def check_trip(self):
+        if error := route_error(self.origin, self.destination, self.transport_mode):
+            raise ValueError(error)
         if self.departure_date <= datetime.now(ZoneInfo("Asia/Kolkata")).date():
             raise ValueError("Choose a future departure date.")
         if not 1 <= (self.return_date - self.departure_date).days <= 7:
@@ -47,11 +53,12 @@ class PlanRequest(DomainModel):
         return self
 
     def preferences(self) -> TripPreferences:
-        return TripPreferences(origin="Delhi", destination="Jaipur", currency="INR",
-                               interests=["history"], pace="relaxed", **self.model_dump())
+        fields = self.model_dump() | {"origin": find_city(self.origin).name,
+                                      "destination": find_city(self.destination).name}
+        return TripPreferences(currency="INR", interests=["history"], pace="relaxed", **fields)
 
 
-app = FastAPI(title="Travel Planning Agent", version="0.13.0")
+app = FastAPI(title="Travel Planning Agent", version="0.14.0")
 logger = logging.getLogger(__name__)
 
 
@@ -105,7 +112,7 @@ def run_workflow(settings, model, preferences, seed=None):
     if preferences.transport_mode in ("train", "compare"):
         needed.append("railradar")
     require_keys(settings, *needed)
-    with TravelProviderSession(settings, jaipur_probe_bindings()) as service:
+    with TravelProviderSession(settings, trip_bindings(preferences)) as service:
         graph = build_provider_workflow(model, InMemorySaver(), service)
         config = {"configurable": {"thread_id": "plan"}, "recursion_limit": 30}
         return graph.invoke((seed or {}) | {"request_patch": preferences.model_dump(mode="json")}, config)

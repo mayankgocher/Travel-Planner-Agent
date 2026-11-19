@@ -507,3 +507,16 @@ can remove unknown visits and keep the first visit to each repeated ID. The
 remaining visits keep their original times. The app only displays a shortened
 schedule if it has at least one activity and passes the same full validator.
 Users see a warning when visits were omitted.
+
+## Checkpoint 14: follow the selected cities
+
+1. `backend/locations.py` maps a city name or an alias to one catalog entry.
+   It rejects a route to the same city or a mode without the required binding.
+2. Chat asks for missing cities in `backend/chat.py`. The form in
+   `frontend/app.py` sends two selected cities to FastAPI. Both paths validate
+   and canonicalize the names before running the graph.
+3. `trip_bindings()` in `backend/providers/session.py` uses SBC and MYS for
+   Bengaluru and Mysuru. The transport adapter reverses the endpoints for
+   the return, and the other adapters use “Mysuru” for hotel and place queries.
+4. When the chat destination changes, the dependency table marks transport,
+   hotels, places and itinerary stale. No Delhi/Jaipur results carry over.

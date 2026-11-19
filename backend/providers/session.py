@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from langchain_core.tools import StructuredTool
 
+from backend.locations import find_city, route_error
 from backend.providers.flights import AirportLocation, FlightAdapter
 from backend.providers.http import ProviderError, SerpApiHttp
 from backend.providers.rail_http import RailRadarHttp
@@ -18,17 +19,32 @@ from backend.services.offer_filters import eligible_transport
 @dataclass(frozen=True)
 class JourneyBindings:
     # Explicit selections, not a silent first autocomplete match.
-    origin_airport: AirportLocation
-    destination_airport: AirportLocation
+    origin_airport: AirportLocation | None
+    destination_airport: AirportLocation | None
     origin_station: StationBinding
     destination_station: StationBinding
     destination_timezone: str
 
     def __post_init__(self):
         ZoneInfo(self.destination_timezone)
-        if (self.origin_airport.city.casefold() != self.origin_station.city.casefold() or
-                self.destination_airport.city.casefold() != self.destination_station.city.casefold()):
-            raise ValueError("Airport and station bindings must describe the same selected cities")
+        for airport, station in ((self.origin_airport, self.origin_station),
+                                 (self.destination_airport, self.destination_station)):
+            if airport and airport.city.casefold() != station.city.casefold():
+                raise ValueError("Airport and station bindings must describe the same selected city")
+
+
+def trip_bindings(preferences: TripPreferences) -> JourneyBindings:
+    error = route_error(preferences.origin, preferences.destination, preferences.transport_mode)
+    origin, destination = find_city(preferences.origin), find_city(preferences.destination)
+    if error or not origin or not destination:
+        raise ValueError(error or "Both departure and destination cities are required.")
+    zone = "Asia/Kolkata"
+    return JourneyBindings(
+        AirportLocation(origin.airport, origin.name, zone) if origin.airport else None,
+        AirportLocation(destination.airport, destination.name, zone) if destination.airport else None,
+        StationBinding(origin.station, origin.name), StationBinding(destination.station, destination.name),
+        zone,
+    )
 
 
 def jaipur_probe_bindings():
@@ -101,6 +117,9 @@ class TravelProviderSession:
                     result = self._search("railradar", mode + "_" + leg, search)
                 else:
                     a, b = self.bindings.origin_airport, self.bindings.destination_airport
+                    if a is None or b is None:
+                        warnings.append("Flight search requires an airport binding for both cities.")
+                        break
                     if leg == "return": a, b = b, a
                     def search(a=a, b=b, leg=leg):
                         zones = {code: "Asia/Kolkata" for code in ("DEL", "JAI", "BOM", "BLR", "HYD", "MAA", "CCU", "AMD", "LKO", "UDR", "JDH", "GOI", "GOX", "PNQ", "COK")}

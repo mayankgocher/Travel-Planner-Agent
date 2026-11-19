@@ -5,10 +5,11 @@ through validated LangChain tools, with explicit selected location bindings.
 Train pricing now has an explicitly approved deterministic mock mode. Schedule
 and price provenance are separate. Checkpoint 11 adds the saved-trip Streamlit
 screen; Checkpoint 12 connects it to FastAPI for the fixed Delhi/Jaipur route.
-General location selection remains pending.
+Checkpoint 14 adds browser route selection from an explicit four-city catalog.
+Open-ended city/station discovery remains pending.
 The recovery revision adds failed-Itinerary resumption without new agents,
 database layers, retry loops or changes to the product scope.
-The diagram remains the product blueprint: general location selection, weather,
+The diagram remains the product blueprint: open-ended city discovery, weather,
 providers, retained locks, version storage and UI are still pending. Current finalize returns a draft
 recommendation, not a reservation or completed product plan version.
 
@@ -413,3 +414,14 @@ The scheduling validator distinguishes IDs outside the candidate list from
 repeated visits to the same ID. After one model correction, Python can omit
 those rows and revalidate a nonempty schedule. No additional model call or
 provider lookup is needed for that step. Remaining conflicts still block display.
+
+## Checkpoint 14: browser route selection
+
+Chat and the form use the same city catalog and reject unsupported names or
+transport modes before travel retrieval. Chat starts with unknown cities; the
+form submits both city fields (the API retains legacy defaults for old callers).
+`trip_bindings()` selects the station and optional airport for each city. The
+existing providers use those codes in both directions, and SerpApi searches for
+hotels and activities in the selected destination. A destination change
+invalidates those results through the existing dependency table. No new agent,
+provider endpoint or lookup request is needed to resolve a supported city.

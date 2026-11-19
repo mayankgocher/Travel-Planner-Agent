@@ -4,14 +4,15 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from backend.llm import ModelCallError
+from backend.locations import find_city, route_error
 from backend.plan_view import plan_view
 from backend.schemas import TripPreferences
 
-ROUTE = {"origin": "Delhi", "destination": "Jaipur", "currency": "INR"}
 TRAIN_CLASSES = {"CC", "EC", "3A", "2A", "1A", "SL"}
 FLIGHT_CLASSES = {"economy", "premium economy", "business", "first"}
 RETAINED = ("preferences", "transport", "hotels", "places", "itinerary", "costs")
 REQUIRED_LABELS = {
+    "origin": "departure city", "destination": "destination city",
     "departure_date": "departure date", "return_date": "return date", "adults": "number of adults",
     "transport_mode": "train, flight, or comparison", "train_class": "train class (e.g. CC)",
     "flight_class": "flight cabin (e.g. Economy)",
@@ -19,8 +20,8 @@ REQUIRED_LABELS = {
 
 
 def chat_constraints(p: TripPreferences) -> tuple[list[str], str | None]:
-    if (p.origin or "").casefold() != "delhi" or (p.destination or "").casefold() != "jaipur":
-        return [], "This checkpoint supports Delhi → Jaipur round trips only. Please keep that route."
+    if error := route_error(p.origin, p.destination, p.transport_mode):
+        return [], error
     if p.currency != "INR":
         return [], "Please use INR for this demo."
     if p.adults is not None and p.adults > 6:
@@ -48,7 +49,7 @@ def chat_constraints(p: TripPreferences) -> tuple[list[str], str | None]:
 @dataclass
 class TripChat:
     # Pending input is separate so clarification cannot invalidate the plan on screen.
-    current: TripPreferences = field(default_factory=lambda: TripPreferences(**ROUTE))
+    current: TripPreferences = field(default_factory=lambda: TripPreferences(currency="INR"))
     pending: TripPreferences | None = None
     question: str | None = None
     state: dict = field(default_factory=dict)
@@ -66,14 +67,14 @@ class TripChat:
         if turn.decision.intent in ("question", "unsupported"):
             return self.reply(turn.decision.answer or "Please tell me what you'd like to plan or change.")
 
-        candidate = candidate.model_copy(update={
-            "origin": "Delhi" if (candidate.origin or "").casefold() == "delhi" else candidate.origin,
-            "destination": "Jaipur" if (candidate.destination or "").casefold() == "jaipur" else candidate.destination,
-            "train_class": candidate.train_class.upper() if candidate.train_class else None,
-        })
         missing, error = chat_constraints(candidate)
         if error:
             return self.reply(error)
+        cities = {name: city.name for name in ("origin", "destination")
+                  if (city := find_city(getattr(candidate, name)))}
+        candidate = candidate.model_copy(update=cities | {
+            "train_class": candidate.train_class.upper() if candidate.train_class else None,
+        })
         if missing or turn.decision.clarification_question:
             self.pending = candidate
             self.question = turn.decision.clarification_question or (

@@ -1,6 +1,6 @@
 # Multi-agent travel planner
 
-Checkpoint 13 — interactive Streamlit chat and Markdown download, 6 November 2026.
+Checkpoint 14 — choose a route in Streamlit chat or in the planning form.
 
 Itinerary patch: after the existing one correction, a draft with unknown or
 repeated place IDs can be shortened if at least one visit survives and the
@@ -10,7 +10,7 @@ shortened schedule passes every check. The app discloses what it omitted.
 run with real provider adapters through validated LangChain tools and LangGraph.
 The connected probe uses explicit Delhi/Jaipur station/airport bindings. The local
 Streamlit demo has a trip chat, a saved result, and a secondary planning form.
-General location selection, weather, locks and product versions remain pending. Train prices
+Open-ended location discovery, weather, locks and product versions remain pending. Train prices
 default to labelled deterministic assumptions; real rail fare access is still restricted. The older
 check_agents.py deliberately retains its fully synthetic travel retrieval.
 
@@ -46,8 +46,10 @@ Dependencies are unchanged.
 
 ## Plan a trip in the browser chat
 
-Install `Travel_Project_Checkpoint_13.zip` using `INSTALL_CHECKPOINT_13.ps1` from
-an extracted staging folder. The installer preserves `.env`, the venv, and reports.
+Install `Travel_Project_Checkpoint_14_Route_Selection.zip` on top of Checkpoint 13's
+itinerary patch, using `INSTALL_CHECKPOINT_14.ps1` from an extracted staging
+folder with `-Project` pointing to your project. The installer backs up replaced
+files and preserves `.env`, the venv, and reports.
 Open two PowerShell terminals in the project root. Start FastAPI in the first:
 
 ```powershell
@@ -62,7 +64,14 @@ when asked. Once you have a plan, try `Keep the trains, but find a cheaper hotel
 Supply the new nightly cap when asked. The existing trains and place candidates
 are reused when the hotel price cap is the only change.
 
-The browser scope remains Delhi → Jaipur, INR, 1–7 nights, and up to 6 adults.
+The browser supports one round trip in INR, 1–7 nights, and up to 6 adults.
+Choose two different cities from Delhi, Jaipur, Bengaluru, and Mysuru. Chat
+asks for missing cities and recognizes New Delhi, Bangalore, and Mysore.
+For example: `Plan a Bengaluru to Mysuru round trip by CC train for two adults.`
+Mysuru is train only in this demo. The **Live planning form** has city dropdowns.
+Route setup selects one station and one airport (where configured) per city;
+it does not prove a service exists on a particular date or class. The saved
+sample and fixed-route CLI provider checks still use Delhi → Jaipur.
 Chat uses Groq to interpret each message; clarification and preference questions
 don't search travel providers. A ready trip needs SerpApi, and rail needs RailRadar.
 Rail fares are demo amounts. Chat memory lives in one FastAPI process and expires

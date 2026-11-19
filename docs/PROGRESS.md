@@ -332,9 +332,21 @@ Even after omission, empty schedules and timing conflicts still need review.
 All 253 offline tests passed under Python 3.12 on Linux, including four added
 regression cases. The patch has not been tested against live providers.
 
+## Checkpoint 14 route selection
+
+- Browser chat and form accept one round trip between two distinct cities from
+  Delhi, Jaipur, Bengaluru, and Mysuru. Routes involving Mysuru are train only.
+- Ran `python -m pytest -q --tb=short` on Linux with Python 3.12. The 260 tests
+  cover both directions of the new train and flight examples, chat clarification,
+  route changes, destination queries and rejected inputs. No live requests were made.
+- On Windows, install the overlay, run the offline suite and restart both
+  processes. In a fresh chat, try one Bengaluru–Mysuru trip with future dates.
+  Compare returned station codes and disclosures; share only sanitized warnings
+  if there is no validated plan. The legacy connected CLI remains fixed route.
+
 ## Still pending in agreed scope
 
-Weather, general location selection,
+Weather, open-ended location discovery,
 user selection controls/locks, durable application lifecycle, plan snapshots,
 systematic evaluation. Graph checkpoints are not
 product versions. No full application readiness claim is supported yet.

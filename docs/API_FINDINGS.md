@@ -309,3 +309,13 @@ A live Streamlit report reached schedule validation with an unknown-or-repeated
 place ID. The old combined message cannot distinguish the two cases. The patch
 was verified with intercepted model responses for both cases; no provider calls
 were made to verify the patch.
+
+## Checkpoint 14: Bengaluru and Mysuru
+
+The curated catalog uses KSR Bengaluru (SBC) and Mysuru Junction (MYS), listed
+in [Indian Railways' Bengaluru division map](https://rb.indianrailways.gov.in/uploads/directorate/civil_engg/pdf/2022/SWR%20SBC%20Division%20Map%202022.pdf)
+and the [South Western Railway system map](https://swr.indianrailways.gov.in/-/image/17804555332641686828073411-OverviewGMBookletUptoMay20231.pdf/OrgChart1170).
+The Bengaluru airport code (BLR) is listed by [Air India](https://www.airindia.com/en-sa/book-flights/bangalore-to-delhi-flights).
+This demo binds no airport for Mysuru; it does not claim Mysuru lacks an airport.
+The SBC/MYS and MYS/SBC requests and destination text were verified with
+intercepted HTTP. Live timetable, class and quote coverage remain unverified.

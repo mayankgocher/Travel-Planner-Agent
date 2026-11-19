@@ -21,7 +21,8 @@ def test_browser_chat_clarifies_and_reuses_trains_on_hotel_change(monkeypatch):
     monkeypatch.setattr(main, "chats", OrderedDict())
     base = Responses()
     decisions = iter([
-        ("plan", {"adults": 2, "transport_mode": "train", "train_class": "CC"}, "What dates?", None),
+        ("plan", {"origin": "Delhi", "destination": "Jaipur", "adults": 2,
+                  "transport_mode": "train", "train_class": "CC"}, "What dates?", None),
         ("update", {k: P[k] for k in ("departure_date", "return_date", "hotel_class", "nightly_max")}, None, None),
         ("update", {}, "What is your new nightly cap?", None),
         ("update", {"nightly_max": "3200"}, None, None),
@@ -73,7 +74,7 @@ def test_browser_chat_clarifies_and_reuses_trains_on_hotel_change(monkeypatch):
             return [str(call.url.params.get("engine") or call.url.host) for call in base.calls
                     if call.url.host != "api.groq.com"]
 
-        first = send("I want to travel by CC train with another adult.")
+        first = send("I want to travel from Delhi to Jaipur by CC train with another adult.")
         assert first["reply"] == "What dates?" and first["plan"] is None and not travel_hosts()
         second = send("February 10 to 13 2027. 3-star under ₹4,000.")
         assert second["session_id"] == first["session_id"] and second["plan"]["days"]
@@ -88,7 +89,7 @@ def test_browser_chat_clarifies_and_reuses_trains_on_hotel_change(monkeypatch):
         assert screen.get("download_button")
         before = len(travel_hosts())
         assert send("What is my nightly cap?")["reply"] == "Your current nightly cap is ₹3,200."
-        assert "Delhi → Jaipur" in send("Go to Mumbai instead.")["reply"]
+        assert "Choose a supported city" in send("Go to Mumbai instead.")["reply"]
         assert len(travel_hosts()) == before
         rejected = send("Under ₹2,400.")
         assert rejected["plan"] == revised["plan"]

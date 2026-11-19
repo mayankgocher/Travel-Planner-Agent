@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, StrictFloat, StrictStr
 
 from backend.llm import ModelCallError, invoke_structured
+from backend.locations import CITY_NAMES
 from backend.schemas import TripPreferences
 
 PreferenceField = Literal[
@@ -114,7 +115,10 @@ class Supervisor:
         prompt = SYSTEM_PROMPT
         if browser_chat:
             context["pending_question"] = chat_question
-            prompt += ("\nBrowser chat is a Delhi–Jaipur round trip in INR. Use existing trip fields and "
+            context["supported_cities"] = CITY_NAMES
+            prompt += ("\nBrowser chat plans one round trip in INR. Ask for missing departure and destination "
+                       "cities. Pass explicitly named cities as updates for Python to check against the catalog. "
+                       "Do not guess or substitute a city. Use existing trip fields and "
                        "the pending question to interpret short replies. For a change like 'cheaper hotel' "
                        "without an amount, ask for a new nightly cap; do not change trip budget or other offers. "
                        "If requested changes conflict with keeping an existing choice, ask what to prioritize. "

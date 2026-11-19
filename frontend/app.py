@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import streamlit as st
 
+from backend.locations import CITY_NAMES, route_error
 from frontend.plan_export import money, plan_markdown
 
 
@@ -170,14 +171,19 @@ def request_plan(payload: dict, url=PLAN_URL) -> dict:
 
 
 def live_tab() -> None:
-    st.write("**Delhi → Jaipur round trip**")
+    st.write("**Plan a round trip**")
     st.caption("Generate plan makes live requests. Train fares are illustrative demo amounts.")
+    start, end = st.columns(2)
+    origin = start.selectbox("Departure city", CITY_NAMES)
+    destination = end.selectbox("Destination city", CITY_NAMES, index=1)
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
     with st.form("live_trip"):
         left, right = st.columns(2)
         depart = left.date_input("Departure", today + timedelta(days=14), min_value=today + timedelta(days=1))
         back = right.date_input("Return", today + timedelta(days=17), min_value=today + timedelta(days=2))
         modes = {"Train": "train", "Flight": "flight", "Compare train and flight": "compare"}
+        if "Mysuru" in (origin, destination):
+            modes = {"Train": "train"}
         mode = left.selectbox("Transport", list(modes))
         adults = right.number_input("Adults", min_value=1, max_value=6, value=2)
         train_class = left.selectbox("Train class (when used)", ["CC", "EC", "3A", "2A", "1A", "SL"])
@@ -191,10 +197,13 @@ def live_tab() -> None:
 
     if submit:
         st.session_state.pop("live_result", None)
-        if not depart or not back or not 1 <= (back - depart).days <= 7 or min_price > max_price:
+        if error := route_error(origin, destination, modes[mode]):
+            st.error(error)
+        elif not depart or not back or not 1 <= (back - depart).days <= 7 or min_price > max_price:
             st.error("Choose a return date one to seven nights later and a valid nightly price range.")
         else:
             payload = {
+                "origin": origin, "destination": destination,
                 "departure_date": depart.isoformat(), "return_date": back.isoformat(), "adults": adults,
                 "transport_mode": modes[mode], "train_class": train_class, "flight_class": cabin,
                 "hotel_class": None if hotel_class == "Any" else int(hotel_class),
@@ -223,7 +232,8 @@ def live_tab() -> None:
 
 
 def chat_tab() -> None:
-    st.caption("Delhi → Jaipur round trip · Tell me your dates, group size, and how you want to travel.")
+    st.caption("Round trips in INR. Tell me your cities, dates, group size, and transport preference.")
+    st.caption("Supported cities: " + ", ".join(CITY_NAMES) + ". Mysuru is train only in this demo.")
     if st.button("New chat"):
         for field in ("chat_id", "chat_messages", "chat_plan", "turn_warnings"):
             st.session_state.pop(field, None)
