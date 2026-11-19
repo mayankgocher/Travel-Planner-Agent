@@ -1,6 +1,6 @@
 # Multi-agent travel planner
 
-Checkpoint 15 — look up Indian railway stations in Streamlit chat.
+Checkpoint 15.2 — improve the browser's train shortlist for the requested class.
 
 Itinerary patch: after the existing one correction, a draft with unknown or
 repeated place IDs can be shortened if at least one visit survives and the
@@ -50,6 +50,8 @@ Install `Travel_Project_Checkpoint_15_Station_Lookup.zip` on top of Checkpoint
 14 with the chat and transfer buffer patches. Run `INSTALL_CHECKPOINT_15.ps1`
 from an extracted staging folder with `-Project` pointing to your project. The
 installer backs up replaced files and preserves `.env`, the venv, and reports.
+For an existing Checkpoint 15.1 install, apply the Checkpoint 15.2 rail
+shortlist overlay and restart FastAPI. The installer is in the overlay ZIP.
 Open two PowerShell terminals in the project root. Start FastAPI in the first:
 
 ```powershell
@@ -79,7 +81,11 @@ Chat uses Groq to interpret each message; clarification and preference questions
 don't normally make travel-provider requests. Station clarification can make
 up to two station lookup calls on a turn with complete trip preferences, but
 doesn't search schedules or hotels until stations are confirmed. A ready trip
-needs SerpApi, and rail needs RailRadar.
+needs SerpApi, and rail needs RailRadar. The browser checks two timetables per
+direction and checks a third only if no usable option was found. For CC or EC,
+provider train type helps decide what to check first; only the timetable
+confirms the operated class. The browser makes at most eight rail schedule and
+timetable calls per plan, separate from station lookup.
 Rail fares are demo amounts. Chat memory lives in one FastAPI process and expires
 on restart or when an older session is evicted. **New chat** starts a fresh trip.
 It does not load the saved demo into the current chat.

@@ -62,9 +62,10 @@ def jaipur_probe_bindings():
 
 class TravelProviderSession:
     """One execution's clients/audit, not a search cache or persistent trip state."""
-    def __init__(self, settings, bindings, *, serp_http=None, rail_http=None):
+    def __init__(self, settings, bindings, *, serp_http=None, rail_http=None, expand_rail_shortlist=False):
         self.settings, self.bindings = settings, bindings
         self.serp_http, self.rail_http = serp_http, rail_http
+        self.expand_rail_shortlist = expand_rail_shortlist
         self._stack, self._blocked = ExitStack(), {}
         self.errors, self.tool_calls = [], []
 
@@ -81,8 +82,9 @@ class TravelProviderSession:
 
     def _rail(self):
         if self.rail_http is None:
-            # Two between searches, <=4 timetables, and <=2 fares only in live-price mode.
-            limit = 6 if self.settings.train_fare_mode == "mock" else 8
+            # Two schedule searches plus up to six timetables in the browser's demo-fare mode.
+            # Live fares keep the former two timetables and one fare per direction.
+            limit = 8 if self.expand_rail_shortlist or self.settings.train_fare_mode == "live" else 6
             self.rail_http = self._stack.enter_context(RailRadarHttp(self.settings.require_provider_key("railradar"), max_requests=limit))
         return self.rail_http
 
@@ -115,7 +117,7 @@ class TravelProviderSession:
                     def search(a=a, b=b, leg=leg):
                         adapter = RailRadarAdapter(self._rail(), fare_mode=self.settings.train_fare_mode)
                         try:
-                            return adapter.search_leg(p, a, b, leg=leg)
+                            return adapter.search_leg(p, a, b, leg=leg, expand_if_unpriced=self.expand_rail_shortlist)
                         except ProviderError as exc:
                             # Keep completed schedule/class evidence even if a live fare request fails.
                             if adapter.last_result:

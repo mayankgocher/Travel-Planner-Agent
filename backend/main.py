@@ -60,7 +60,7 @@ class PlanRequest(DomainModel):
         return TripPreferences(currency="INR", interests=["history"], pace="relaxed", **fields)
 
 
-app = FastAPI(title="Travel Planning Agent", version="0.15.1")
+app = FastAPI(title="Travel Planning Agent", version="0.15.2")
 logger = logging.getLogger(__name__)
 
 
@@ -114,7 +114,7 @@ def run_workflow(settings, model, preferences, seed=None):
     if preferences.transport_mode in ("train", "compare"):
         needed.append("railradar")
     require_keys(settings, *needed)
-    with TravelProviderSession(settings, trip_bindings(preferences)) as service:
+    with TravelProviderSession(settings, trip_bindings(preferences), expand_rail_shortlist=True) as service:
         graph = build_provider_workflow(model, InMemorySaver(), service)
         config = {"configurable": {"thread_id": "plan"}, "recursion_limit": 30}
         return graph.invoke((seed or {}) | {"request_patch": preferences.model_dump(mode="json")}, config)

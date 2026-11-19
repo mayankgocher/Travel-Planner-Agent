@@ -441,3 +441,12 @@ Hotel and place search use the available destination name, never a bare code.
 Station changes invalidate transport/itinerary and costs; a city change also
 invalidates hotels and places. The planning form and flight routes still use
 catalog bindings. The provider lookup is not an exhaustive city directory.
+
+### Browser rail shortlist
+
+The browser's demo-fare path uses the dated station pair response once per
+direction. For CC or EC, type metadata can prioritize chair-car candidates.
+The timetable still checks class and ordered stops. If the first two
+candidates yield no usable fare, a third can be checked. This gives at most
+eight schedule/timetable calls, separate from up to two station lookups.
+CLI probe caps and the live fare endpoint behavior are unchanged.

@@ -1,5 +1,6 @@
 """Exercise open-ended station selection with simulated provider responses."""
 from datetime import datetime
+from copy import deepcopy
 
 import httpx
 import pytest
@@ -168,6 +169,53 @@ def test_empty_non_planning_decision_does_not_start_an_unsupported_search(monkey
         reply = send(chat_client(monkeypatch, http), message)
     assert reply["plan"] is None and "one destination" in reply["reply"]
     assert [r.url.host for r in handler.calls] == ["api.groq.com"]
+
+
+@pytest.mark.parametrize(("preferred_type", "matching_class", "checked"), [
+    ("Vande Bharat Express", True, ["99921", "01415"]),
+    (None, True, ["01415", "05094", "99921"]),
+    (None, False, ["01415", "05094", "99921"]),
+])
+def test_browser_checks_an_extra_outbound_candidate_only_when_needed(
+    monkeypatch, preferred_type, matching_class, checked,
+):
+    class ShortlistResponses(StationResponses):
+        def __call__(self, request):
+            response = super().__call__(request)
+            if request.url.host != "api.railradar.in":
+                return response
+            path = request.url.path
+            body = response.json()
+            if path.endswith("/between/CNB/LKO"):
+                rows = body["data"]["trains"]
+                rows[0]["train"]["type"] = preferred_type
+                for number, arrive, duration in [("01415", "10:05", 65), ("05094", "10:35", 95), ("99923", "12:00", 180)]:
+                    train = deepcopy(rows[0])
+                    train["train"] = {"number": number, "name": "Invented shortlist service", "type": "Mail/Express"}
+                    train["to"]["arrival"], train["duration"] = arrive, duration
+                    rows.append(train)
+                    self.routes[number] = self.routes["99921"]
+            elif path.rsplit("/", 1)[-1] in ("01415", "05094", "99923") or (
+                path.endswith("/99921") and not matching_class
+            ):
+                body["data"]["train"]["availableClasses"] = ["SL"]
+            return httpx.Response(200, json=body)
+
+    handler = ShortlistResponses([])
+    with httpx.Client(transport=httpx.MockTransport(handler), trust_env=False) as http:
+        api = chat_client(monkeypatch, http)
+        reply = send(api, "Plan a round trip from CNB to LKO by CC train for 2 adults. "
+                          "Depart on 10 February 2027 and return on 13 February 2027.")
+    paths = [r.url.path for r in handler.calls if r.url.host == "api.railradar.in"]
+    assert paths == ["/v1/lookup/search/stations", "/v1/lookup/search/stations", "/v1/trains/between/CNB/LKO",
+                     *("/v1/trains/" + code for code in checked), "/v1/trains/between/LKO/CNB", "/v1/trains/99922"]
+    trip = reply["plan"]
+    if matching_class:
+        assert trip["days"] and [leg["train_number"] for leg in trip["transport"]] == ["99921", "99922"]
+        assert all(leg["travel_class"] == "CC" and leg["price"]["pricing_mode"] == "demo" for leg in trip["transport"])
+    else:
+        assert not trip["days"] and [leg["train_number"] for leg in trip["transport"]] == ["99922"]
+        assert any("No usable outbound CC option" in w and "3 of 4" in w for w in trip["warnings"])
 
 
 @pytest.mark.parametrize(("origin", "text"), [

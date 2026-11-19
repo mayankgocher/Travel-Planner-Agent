@@ -411,6 +411,20 @@ regression cases. The patch has not been tested against live providers.
 - Install the cumulative Checkpoint 15.1 intake overlay on Checkpoint 15.
   Restart FastAPI, click New chat, and test the input once.
 
+### Checkpoint 15.2: class-aware train shortlist
+
+- Live Kanpur Central–Lucknow chat reached station lookup and accepted CNB and
+  LKO. It returned a CC train for the return and a hotel, but neither of the
+  two outbound timetables checked confirmed the requested class.
+- The browser now prioritizes likely CC/EC train types, then checks one extra
+  candidate if neither of the first two produces a usable option. Type does
+  not verify class. Station choices and fare mode are unchanged.
+- Ran `python -m pytest -q --tb=short` on Linux Python 3.12: 283 passed.
+  New cases cover priority, third-candidate recovery and an exhausted
+  shortlist. No live calls were made.
+- Install over Checkpoint 15.1 and restart FastAPI. The original request in a
+  new chat can recheck the route once; live dates and availability may differ.
+
 ## Still pending in agreed scope
 
 Weather, open-ended airport discovery,

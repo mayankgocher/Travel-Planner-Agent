@@ -329,3 +329,14 @@ uses the station name as a location fallback when needed, and stops if no
 station is confirmed. Each chat turn makes at most two lookup requests with
 five candidates per lookup. Coverage outside the curated list depends on
 provider results. No new live provider request was made for this checkpoint.
+
+## Checkpoint 15.2: operating class and the shortlist
+
+[Trains Between](https://railradar.in/docs/trains-between-stations) includes
+train type and date filtering but documents no coach-class filter.
+[Timetable](https://railradar.in/docs/get-train-details) includes operated
+classes and route stops. This is class evidence, not seat availability.
+The user confirmed both stations live and obtained a return leg, but
+neither of the two outbound trains checked confirmed CC. The improved
+shortlist was verified against offline fixtures. That live result does not
+establish whether another CC service was returned or operated on the date.

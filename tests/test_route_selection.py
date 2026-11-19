@@ -77,9 +77,9 @@ def bind_mock_http(monkeypatch, http):
     monkeypatch.setattr(main, "chats", OrderedDict())
     monkeypatch.setattr(main, "Settings", lambda **kwargs: settings)
     monkeypatch.setattr(main, "create_model", lambda *args, **kwargs: create_model(settings, http_client=http))
-    monkeypatch.setattr(main, "TravelProviderSession", lambda s, bindings: TravelProviderSession(
+    monkeypatch.setattr(main, "TravelProviderSession", lambda s, bindings, **kwargs: TravelProviderSession(
         s, bindings, serp_http=SerpApiHttp("test-serp", http_client=http, max_requests=4),
-        rail_http=RailRadarHttp("test-rail", http_client=http, max_requests=6)))
+        rail_http=RailRadarHttp("test-rail", http_client=http, max_requests=8), **kwargs))
 
 
 def assert_mysuru_trip(result, requests):

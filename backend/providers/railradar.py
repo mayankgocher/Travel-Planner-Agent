@@ -98,6 +98,21 @@ def parse_between(response, p, origin, destination, day):
     return SearchResult(offers, warnings, {"top_level_keys": list(response.data), "raw_train_count": len(data["trains"])})
 
 
+def _chair_car_hints(response) -> set[str]:
+    """Train type is a shortlist hint only, never operated-class evidence."""
+    numbers = set()
+    for row in response.data["data"]["trains"]:
+        train = row.get("train") if isinstance(row, dict) else None
+        if not isinstance(train, dict) or not isinstance(train.get("number"), str):
+            continue
+        train_type = train.get("type")
+        if isinstance(train_type, str):
+            kind = " ".join(train_type.casefold().replace("-", " ").split())
+            if "shatabdi" in kind or ("vande bharat" in kind and "sleeper" not in kind):
+                numbers.add(train["number"])
+    return numbers
+
+
 def parse_timetable(response, number):
     data = response.data.get("data")
     if not isinstance(data, dict) or not isinstance(data.get("train"), dict):
@@ -158,7 +173,7 @@ class RailRadarAdapter:
             raise ValueError("This adapter supports standard five-digit train numbers")
         return parse_timetable(self.http.get(f"/v1/trains/{number}", {"haltsOnly": "true"}), number)
 
-    def search_leg(self, p, origin, destination, *, leg="outbound", shortlist_limit=2):
+    def search_leg(self, p, origin, destination, *, leg="outbound", shortlist_limit=2, expand_if_unpriced=False):
         if leg not in ("outbound", "return") or p.missing_required() or type(shortlist_limit) is not int or not 1 <= shortlist_limit <= 2:
             raise ValueError("A complete trip and a one/two-train shortlist are required")
         cities = (p.origin, p.destination) if leg == "outbound" else (p.destination, p.origin)
@@ -169,10 +184,16 @@ class RailRadarAdapter:
         self.timetables, self.fare_components, self.priced_offer_ids = [], {}, []
         self.last_result = None
         day = p.departure_date if leg == "outbound" else p.return_date
-        self.last_result = parse_between(self.http.get(f"/v1/trains/between/{origin.code}/{destination.code}",
-            {"date": day.isoformat(), "byCity": "false", "live": "false"}), p, origin, destination, day)
-        shortlist = sorted(self.last_result.items, key=lambda o: (o.arrival - o.departure, o.departure))[:shortlist_limit]
-        for offer in shortlist:
+        response = self.http.get(f"/v1/trains/between/{origin.code}/{destination.code}",
+            {"date": day.isoformat(), "byCity": "false", "live": "false"})
+        self.last_result = parse_between(response, p, origin, destination, day)
+        extra = self.fare_mode == "mock" and expand_if_unpriced
+        preferred = _chair_car_hints(response) if extra and p.train_class.upper() in ("CC", "EC") else set()
+        ranked = sorted(self.last_result.items, key=lambda o: (o.train_number not in preferred,
+                                                              o.arrival - o.departure, o.departure))
+        for index, offer in enumerate(ranked[:shortlist_limit + int(extra)]):
+            if index >= shortlist_limit and self.priced_offer_ids:
+                break
             # Details are needed here to check coach class before spending a fare request.
             timetable = self.timetable(offer.train_number)
             self.timetables.append(timetable)
@@ -201,5 +222,13 @@ class RailRadarAdapter:
         if self.fare_mode == "mock" and self.priced_offer_ids:
             self.last_result.warnings.append("ASSUMED DEMO FARES: prices and any resulting budget comparison are illustrative, not verified railway costs.")
         if not self.priced_offer_ids:
-            self.last_result.warnings.append("No usable fare was obtained within the bounded shortlist; remaining services were not queried.")
+            if not ranked:
+                self.last_result.warnings.append(f"No usable direct {leg} train schedule was returned for the selected stations and date.")
+            else:
+                checked = len(self.timetables)
+                message = (f"No usable {leg} {p.train_class.upper()} option was found "
+                           f"after checking timetables for {checked} of {len(ranked)} returned services.")
+                if checked < len(ranked):
+                    message += " Other services were not checked."
+                self.last_result.warnings.append(message)
         return self.last_result

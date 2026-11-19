@@ -561,3 +561,11 @@ count and dates, validates them and starts the same station-selection flow.
 In `backend/main.py` the Groq client is created only when a step needs it. The
 rest of the planning workflow still uses its usual model steps, and other
 messages still go to the Supervisor.
+
+### Check a third train when neither of the first two works
+
+In `backend/providers/railradar.py`, browser planning sorts likely CC/EC
+services first using the returned train type, then by duration and departure.
+It checks the timetable before attaching class or demo fare. If the first two
+do not produce a usable option, it can check one more without repeating the
+route search. A warning names the affected leg and class when none qualifies.

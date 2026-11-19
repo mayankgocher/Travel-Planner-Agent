@@ -16,7 +16,7 @@ def patch_providers(monkeypatch, http):
     settings = config()
     service, model = setup(settings, http)
     monkeypatch.setattr(main, "Settings", lambda **_: settings)
-    monkeypatch.setattr(main, "TravelProviderSession", lambda *args: service)
+    monkeypatch.setattr(main, "TravelProviderSession", lambda *args, **kwargs: service)
     monkeypatch.setattr(main, "create_model", lambda *args, **kwargs: model)
     return service
 
