@@ -1,8 +1,9 @@
 """Schedule supplied places; permit one correction using precise Python errors."""
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import ValidationError
 
-from backend.llm import invoke_structured
+from backend.llm import ModelCallError, invoke_structured
 from backend.schemas import HotelOffer, PlaceCandidate, TransportOffer, TripPreferences
 from backend.services.offer_filters import transport_leg
 from backend.services.scheduling import (
@@ -59,7 +60,22 @@ class ItineraryAgent:
             return validate_schedule(draft, places, outward, returning, p, self.timezone)
 
         for attempt in range(2):
-            result = invoke_structured(self.model, Schedule, messages)
+            try:
+                result = invoke_structured(self.model, Schedule, messages)
+            except ModelCallError as error:
+                prior = state.get("previous_itinerary") or {}
+                if error.http_status != 400 or prior.get("plan_status") != "valid_draft" or prior.get("validation_errors"):
+                    raise
+                try:
+                    schedule = Schedule.model_validate({"activities": prior.get("activities"), "notes": []})
+                except ValidationError:
+                    raise error from None
+                errors, warnings = validate(schedule)
+                if errors:
+                    raise
+                warnings.append("The itinerary request was rejected (HTTP 400). Kept the previous activities after "
+                                "validating them against the updated transport.")
+                break
             self.usage = {key: self.usage.get(key, 0) + value for key, value in result.usage.items()}
             schedule = Schedule.model_validate(result.parsed)
             errors, warnings = validate(schedule)

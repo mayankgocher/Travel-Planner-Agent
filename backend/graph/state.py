@@ -19,6 +19,7 @@ class TripState(TypedDict, total=False):
     transport: list[dict[str, Any]]
     hotels: list[dict[str, Any]]
     itinerary: dict[str, Any] | None
+    previous_itinerary: dict[str, Any] | None
     costs: dict[str, Any] | None
     warnings: list[str]
     trace: list[str]

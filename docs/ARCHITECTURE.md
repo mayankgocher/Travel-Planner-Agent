@@ -464,3 +464,14 @@ Python stores the IATA codes alongside any rail codes in trip preferences.
 Changing an airport invalidates transport, itinerary and costs; a change to
 the destination city also invalidates hotels and places. Existing timezone
 checks still reject flight segments whose airport timezone is unknown.
+
+### Recovery during a comparison
+
+If transport ranking is rejected (HTTP 400 or an invalid candidate list),
+Python ranks only offers that already passed the hard filters. It uses journey
+duration and departure time since train demo prices and incomplete flight quotes
+are not comparable. A rate limit or other provider error is still reported.
+For a transport revision with the same dates, destination and activity
+preferences, the previous schedule can be revalidated against the new trip if
+the itinerary model request gets HTTP 400. Invalid schedules still fail,
+leaving the previously displayed plan intact. No extra model retry is added.

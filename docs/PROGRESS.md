@@ -438,6 +438,23 @@ regression cases. The patch has not been tested against live providers.
 - Install over 15.2 and restart both servers. Try a domestic economy round
   trip in Trip chat between cities outside the original flight catalog.
 
+### Checkpoint 16.1: comparison recovery
+
+- The Delhi–Lucknow CC comparison searched both modes live. No CC option was
+  confirmed in the limited rail shortlist, so the final plan used flights.
+  A 3A revision reached both providers but returned a model HTTP 400, leaving
+  the previous plan visible. Its pasted warning did not identify the role.
+- Added comparison ranking fallback, conditional reuse of the validated
+  activity schedule, stage-specific warnings, and direct intake for the
+  documented comparison request. No additional provider requests were added.
+- Ran `python -m pytest -q --tb=short` on Linux Python 3.12: 292 passed.
+  Offline coverage includes both modes appearing in the ranking candidates,
+  ranking rejection, compatible and incompatible old itinerary after
+  itinerary rejection, and a rate-limit failure without unsafe recovery.
+- Install over Checkpoint 16 and restart FastAPI. In a new chat try the full
+  comparison template with 3A; select a listed airport or station if prompted.
+  No live calls were made for the patch itself.
+
 ## Still pending in agreed scope
 
 Weather,

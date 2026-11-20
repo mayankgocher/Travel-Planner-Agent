@@ -62,7 +62,7 @@ class PlanRequest(DomainModel):
         return TripPreferences(currency="INR", interests=["history"], pace="relaxed", **fields)
 
 
-app = FastAPI(title="Travel Planning Agent", version="0.16.0")
+app = FastAPI(title="Travel Planning Agent", version="0.16.1")
 logger = logging.getLogger(__name__)
 
 

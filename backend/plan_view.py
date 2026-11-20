@@ -48,6 +48,11 @@ def plan_view(state: dict, preferences: TripPreferences) -> dict:
     warnings = list(dict.fromkeys(state.get("warnings") or []))
     warnings = [w for w in warnings if not w.startswith(HOURS_WARNING)]
     model_error = state.get("specialist_error") or {}
+    step = {"transport": "Transport ranking", "hotels": "Hotel ranking", "itinerary": "Itinerary planning"}.get(model_error.get("role"))
+    if step:
+        status_code = model_error.get("http_status")
+        detail = f" (HTTP {status_code})" if type(status_code) is int else ""
+        warnings.append(f"{step} could not finish{detail}.")
     if model_error.get("http_status") == 429:
         warnings.append("Groq rate-limited this request. Available search results are shown below.")
     if state.get("input_error"):

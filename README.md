@@ -1,6 +1,6 @@
 # Multi-agent travel planner
 
-Checkpoint 16 — airport discovery for domestic flights and comparisons in Trip chat.
+Checkpoint 16.1 — recover comparisons when a model request is rejected.
 
 Itinerary patch: after the existing one correction, a draft with unknown or
 repeated place IDs can be shortened if at least one visit survives and the
@@ -53,6 +53,9 @@ installer backs up replaced files and preserves `.env`, the venv, and reports.
 For an existing Checkpoint 15.2 install, apply
 `Travel_Checkpoint_16_Airport_Lookup.zip` with `INSTALL_AIRPORT_LOOKUP.ps1`
 and restart FastAPI and Streamlit. The installer is in the overlay ZIP.
+For existing Checkpoint 16 installations, use
+`Travel_Checkpoint_16_1_Comparison_Recovery.zip` with
+`INSTALL_COMPARISON_RECOVERY.ps1` and restart FastAPI.
 Open two PowerShell terminals in the project root. Start FastAPI in the first:
 
 ```powershell
@@ -82,6 +85,10 @@ say `cancel airport selection` to change the request. Airport lookup does not
 guarantee a flight operates on the requested dates. Comparison requests also
 need a railway station for each of the same cities. The **Live planning form**
 still has the four city dropdowns; use Trip chat for broader airport lookup.
+If the comparison ranking request gets HTTP 400, the app can rank eligible
+offers by journey duration and departure time. It does not compare demo fares
+with flight quotes. A revised trip may keep the previous activities after
+checking them against its new transport and stay.
 The saved sample
 and fixed-route CLI provider checks still use Delhi → Jaipur.
 Chat uses Groq to interpret each message; clarification and preference questions

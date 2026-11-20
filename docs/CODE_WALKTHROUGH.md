@@ -578,3 +578,11 @@ waits for the user to choose one. The explicit flight template skips the
 Supervisor for initial intake just like the train template. In comparisons,
 chat also resolves the railway stations for those cities. Then
 `trip_bindings()` hands the selected codes to the same transport workflow.
+
+### Recover a comparison revision without redoing provider searches
+
+`TransportationAgent` can continue with a duration sort if comparison ranking
+is rejected. If `ItineraryAgent` instead gets HTTP 400 for a transport revision,
+it can keep previous activities only if the complete validator accepts them
+with the new selected transport. When recovery cannot proceed, `plan_view()`
+names the failed step and HTTP status without exposing the provider body.

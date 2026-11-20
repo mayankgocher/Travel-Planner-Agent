@@ -52,16 +52,23 @@ def _explicit_train_class(message: str) -> str | None:
 
 
 def _explicit_round_trip(message: str) -> dict:
-    """Read only the complete train or flight template; never guess a missing field."""
+    """Read complete round-trip templates; never guess a missing field."""
     place = r"[\w .’'-]{1,100}"
     date_text = r"\d{1,2} [A-Za-z]+ \d{4}"
     cabin = r"economy|premium economy|business|first"
+    text = " ".join(message.split())
+    route = rf"from (?P<origin>{place}?) to (?P<destination>{place}?)"
+    dates_text = rf"Depart on (?P<departure_date>{date_text}) and return on (?P<return_date>{date_text})"
+    passengers = r"for (?P<adults>[1-6]) adults?\."
     match = re.fullmatch(
-        rf"Plan a round trip from (?P<origin>{place}?) to (?P<destination>{place}?) "
+        rf"Plan a round trip {route} "
         rf"by (?:(?P<train_class>{_CLASS_CODE}) train|(?P<flight_class>{cabin}) flight) "
-        rf"for (?P<adults>[1-6]) adults?\. "
-        rf"Depart on (?P<departure_date>{date_text}) and return on (?P<return_date>{date_text})\.?",
-        " ".join(message.split()), re.IGNORECASE,
+        rf"{passengers} {dates_text}\.?",
+        text, re.IGNORECASE,
+    ) or re.fullmatch(
+        rf"Compare trains and flights for a round trip {route} {passengers} {dates_text}\. "
+        rf"Use (?P<train_class>{_CLASS_CODE}) for trains and (?P<flight_class>{cabin}) for flights\.?",
+        text, re.IGNORECASE,
     )
     if not match:
         return {}
@@ -74,7 +81,8 @@ def _explicit_round_trip(message: str) -> dict:
                  for name in ("departure_date", "return_date")}
     except ValueError:
         return {}
-    mode = "train" if fields["train_class"] else "flight"
+    mode = ("compare" if fields["train_class"] and fields["flight_class"]
+            else "train" if fields["train_class"] else "flight")
     return {k: v for k, v in fields.items() if v is not None} | dates | {
         "transport_mode": mode, "adults": int(fields["adults"]),
     }

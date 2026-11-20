@@ -57,6 +57,12 @@ def prepare(state: TripState) -> dict:
         updates["hotels"] = []
     if "itinerary" in affected:
         updates["itinerary"] = None
+    # A prior schedule is a recovery candidate only for a comparison with
+    # unchanged dates, destination, activity preferences and place data.
+    updates["previous_itinerary"] = (
+        state.get("itinerary") if preferences.transport_mode == "compare" and "transport" in affected
+        and not ({"places", "weather"} & affected) and previous.pace == preferences.pace else None
+    )
     if "costs" in affected:
         updates["costs"] = None
     return updates
